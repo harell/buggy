@@ -10,6 +10,7 @@ Open `index.html` in a browser. It loads Three.js 0.160 and Google Fonts from CD
 - **Car (right):** drag to orbit, scroll or pinch to zoom, right-drag to pan. The car stays in place while the dirt track slides under it. Bumps in the track work the shock absorbers.
 - **Take it apart:** the button or slider spreads the parts out into an exploded view. Every part keeps moving while it is apart.
 - **Look closer:** Engine, Gears, Battery, Brain, Steering, Springs, Wheels, Lights, Wires, Frame, Body. Picking one makes everything else see-through, gives that part a soft glow, moves the camera to it and shows a kid-level explanation plus a note for grown-ups. The motor can and the receiver housing become see-through when picked.
+- **Springs demo:** *Bumpy road* turns the track into gravel and starts driving with a side view. *Lock the springs* bolts the body to the wheels. A live graph compares one wheel's bumps with the body above it, along with how much of the bumping the body feels.
 - **Wires** glow in the direction current flows. It flips when you reverse.
 - **Drive / Steer path** strip shows how a signal travels: remote › radio › brain › motor › gears › wheels.
 - **Slow-mo** turns on automatically for the take-apart view and the gear-heavy parts, so the gears don't blur.

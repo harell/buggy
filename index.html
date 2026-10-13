@@ -81,7 +81,7 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
 #car{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 #car.picking{cursor:pointer}
 .labels{position:absolute;inset:0;pointer-events:none}
-.label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);pointer-events:auto;font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 2px 8px rgba(10,20,40,.15);cursor:pointer;white-space:nowrap}
+.label{position:absolute;left:0;top:0;will-change:transform;transform:translate(-50%,-100%);pointer-events:auto;font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 2px 8px rgba(10,20,40,.15);cursor:pointer;white-space:nowrap}
 .label.sel{background:var(--glow);color:#1a0d00;border-color:var(--glow)}
 .hud{position:absolute;top:14px;right:16px;display:flex;gap:8px}
 .hud button{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer}
@@ -96,6 +96,18 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
 .flow button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;opacity:.55}
 .flow button.lit{opacity:1;background:var(--blue);color:var(--on-blue);border-color:var(--blue)}
 .flow .arr{color:var(--muted);font-size:12px}
+.ride{position:absolute;left:16px;top:40px;width:250px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px 10px}
+.ride h4{margin:0 0 4px;font-family:var(--font-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.ride canvas{display:block;width:100%;height:80px}
+.ride .key{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:4px}
+.ride .key i{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.ride .feel{font-weight:800;font-size:14px;margin-top:4px;font-variant-numeric:tabular-nums}
+.demo{display:flex;flex-direction:column;gap:8px}
+.demo-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.demo p{margin:0;font-size:12px;color:var(--muted);line-height:1.45}
+.dbtn{min-height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);font-weight:800;font-size:13px;cursor:pointer}
+.dbtn[aria-pressed="true"]{background:var(--glow-soft);border-color:var(--glow)}
+.dbtn:focus-visible{outline:3px solid var(--glow);outline-offset:2px}
 .nogl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
 @media (max-width:760px){
   body{overflow:auto}
@@ -106,6 +118,7 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
   .flow{right:16px;bottom:96px}
   .gauge{width:120px}
   .hint{display:none}
+  .ride{top:56px;width:200px}
 }
 @media (prefers-reduced-motion:reduce){.hold,.flow button{transition:none}}
 </style>
@@ -142,6 +155,15 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
       <div class="slider-row"><span>Together</span><input type="range" id="explode" min="0" max="100" value="0" aria-label="How far apart"><span>Apart</span></div>
     </section>
 
+    <section class="demo" aria-label="Springs demo">
+      <h2>Springs demo</h2>
+      <div class="demo-row">
+        <button class="dbtn" id="d-rough" aria-pressed="false">Bumpy road</button>
+        <button class="dbtn" id="d-lock" aria-pressed="false">Lock the springs</button>
+      </div>
+      <p>Turn on the bumpy road and watch the wheels jump while the body glides. Then lock the springs: now the whole car shakes.</p>
+    </section>
+
     <section>
       <h2>Look closer</h2>
       <div class="chips" id="chips"></div>
@@ -155,6 +177,12 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
     <div class="labels" id="labels"></div>
     <p class="hint">Drag to spin · scroll to zoom · right-drag to slide · tap a part</p>
     <div class="hud"><button id="b-reset">Reset view</button></div>
+    <div class="ride" id="ride" hidden>
+      <h4>Front-left corner: bumps vs ride</h4>
+      <canvas id="ride-c" aria-label="Graph of wheel bumps compared with body movement"></canvas>
+      <div class="key"><span><i style="background:var(--glow)"></i>Wheels</span><span><i style="background:var(--blue)"></i>Body</span></div>
+      <div class="feel" id="ride-feel">Body feels 0% of the bumps</div>
+    </div>
     <div class="flow" id="flow" aria-live="polite"></div>
     <div class="gauge" aria-label="Speed">
       <svg viewBox="0 0 120 66" aria-hidden="true">
@@ -222,7 +250,7 @@ const PART_INFO = {
     kid:'Turn the wheel on the remote, and a tiny motor turns a gear. The gear slides a bar with teeth left or right, and the bar pulls the front wheels so they turn.',
     adult:'Toy-grade steering: a small DC motor and gear train drive a rack and pinion, and tie rods push the steering knuckles. A spring centres the wheels when you let go. Cheap cars like this usually have no servo, so steering is full-left, straight or full-right.'},
   suspension:{chip:'Springs',title:'Shock absorbers',color:'#3a3d44',
-    kid:'Springs squish when the car drives over bumps, so it rolls smoothly instead of bouncing like a ball. Drive forward and watch them squish!',
+    kid:'Springs squish when the car drives over bumps, so it rolls smoothly instead of bouncing like a ball. Try the Bumpy road, then lock the springs and see the difference!',
     adult:'Four independent coil-over shocks, the "high-strength shock absorber" from the listing. The front wheels hang on A-arms. At the back, the motor, gearbox and axle swing up and down together. Toy shocks have real springs but usually little or no oil damping.'},
   wheels:{chip:'Wheels',title:'Wheels and tyres',color:'#1d1e21',
     kid:'Big bumpy tyres grab the ground on grass, sand, gravel and road. The motor only pushes the back wheels. The front wheels roll along and do the steering.',
@@ -437,9 +465,16 @@ const dirt=canvasTex(512,512,(g,S)=>{
     wrap(x,y,rx+2,(X,Y)=>{g.save();g.translate(X,Y);g.rotate(a);g.fillStyle='rgba(60,48,36,.35)';g.beginPath();g.ellipse(1,1.5,rx,ry,0,0,TAU);g.fill();g.fillStyle=`rgb(${l},${l-12},${l-30})`;g.beginPath();g.ellipse(0,0,rx,ry,0,0,TAU);g.fill();g.fillStyle='rgba(255,255,255,.25)';g.beginPath();g.ellipse(-rx*.3,-ry*.35,rx*.4,ry*.3,0,0,TAU);g.fill();g.restore()});}
 });
 dirt.wrapS=dirt.wrapT=THREE.RepeatWrapping;
+let roughOn=false;
+function roughBump(x,z){ // small, fast bumps (gravel); still repeats every TILE so the ground can wrap
+  const k=TAU/TILE;
+  return 0.46*Math.sin(4*k*x+0.3)*Math.sin(3*k*z+1.7)+0.28*Math.sin(k*(5*x-2*z)+0.9)+0.2*Math.sin(k*(2*x+6*z)+2.2);
+}
+const groundH=(x,z)=>bump(x,z)+(roughOn?roughBump(x,z):0);
 const GS=360;
-const gGeo=new THREE.PlaneGeometry(GS,GS,180,180); gGeo.rotateX(-Math.PI/2);
-{const p=gGeo.attributes.position; for(let i=0;i<p.count;i++) p.setY(i,bump(p.getX(i),p.getZ(i))); gGeo.computeVertexNormals();}
+const gGeo=new THREE.PlaneGeometry(GS,GS,240,240); gGeo.rotateX(-Math.PI/2);
+function shapeGround(){const p=gGeo.attributes.position; for(let i=0;i<p.count;i++) p.setY(i,groundH(p.getX(i),p.getZ(i))); p.needsUpdate=true; gGeo.computeVertexNormals();}
+shapeGround();
 dirt.repeat.set(GS/TILE,GS/TILE);
 const groundMat=new THREE.MeshStandardMaterial({map:dirt,roughness:.96,metalness:0});
 const ground=new THREE.Mesh(gGeo,groundMat); ground.receiveShadow=true;
@@ -851,7 +886,7 @@ function updateRings(pool,cam,dt,size){for(const m of pool){if(m.userData.t>=1){
    UI state
    ============================================================ */
 const held=new Set();
-const state={cruise:false,lights:true,slow:false,sound:true,explodeT:0,explode:0,timeScale:1,
+const state={locked:false,cruise:false,lights:true,slow:false,sound:true,explodeT:0,explode:0,timeScale:1,
   throttle:0,v:0,vPrev:0,steer:0,steerPrev:0,steerVel:0,dist:0,wheelDrag:null,
   pose:{x:0,z:0,h:0},heave:0,heaveV:0,pitch:0,pitchV:0,roll:0,rollV:0,ringClock:0};
 let selected=null;
@@ -1054,6 +1089,50 @@ const GEAR_PHASE=(()=>{
   const a1=Math.atan2(G1.y-MOTOR.y,G1.x-MOTOR.x), a2=Math.atan2(AXLE.y-G1.y,AXLE.x-G1.x);
   return {pin:a1, g1a:a1+Math.PI+Math.PI/28, g1b:a2, fg:a2+Math.PI+Math.PI/30};
 })();
+let labelAnchors=null;
+function buildLabelAnchors(){
+  // point above each part, stored in the frame of a group that never spins (wheel/rotor spin would shake a bounding box)
+  const top=(obj,mesh)=>{const b=new THREE.Box3().setFromObject(mesh);const c=b.getCenter(V());c.y=b.max.y+0.4;return{obj,local:obj.worldToLocal(c)}};
+  return {
+    motor:top(pMotor,motorParts.can), gears:top(pGear1,pGearCase.children[0]), battery:top(pBattery,pBattery.children[0]),
+    board:top(pBoard,pBoard.children[0]), steering:top(pSteerBox,pSteerBox.children[0]),
+    suspension:{obj:shocks.FR,local:V(0,0.7,0)}, wheels:{obj:wheels.FR,local:V(0,R+0.5,0)},
+    lights:top(pLights,pLights.children[0]), wires:top(pWires,wires[2].m), chassis:top(pChassis,pChassis.children[0]), body:top(pCage,PARTS.body.anchor),
+  };
+}
+
+/* Springs demo: rough road, lock the springs, and a live graph of wheels vs body */
+const rideEl=$('ride'), rideC=$('ride-c'), rideFeel=$('ride-feel');
+const RIDE_N=240; const rideW=new Float32Array(RIDE_N), rideB=new Float32Array(RIDE_N); let rideI=0, rideAcc=0, rideShown=false;
+let feelSmooth=0, prevW=0, prevB=0, vW2=0, vB2=0;
+function rideSample(dt,w,b,still){
+  if(dt<=0)return;
+  const vw=(w-prevW)/dt, vb=(b-prevB)/dt; prevW=w; prevB=b;
+  const a=Math.min(1,dt*1.2); vW2+= (vw*vw-vW2)*a; vB2+=(vb*vb-vB2)*a;
+  rideAcc+=dt; while(rideAcc>1/60){rideAcc-=1/60; rideW[rideI]=w; rideB[rideI]=b; rideI=(rideI+1)%RIDE_N;}
+  const pct=still||vW2<1e-4?0:clamp(Math.sqrt(vB2/vW2)*100,0,100); feelSmooth+=(pct-feelSmooth)*Math.min(1,dt*2);
+}
+function drawRide(){
+  const show=roughOn||state.locked; if(show!==rideShown){rideEl.hidden=!show;rideShown=show}
+  if(!show)return;
+  const dpr=Math.min(devicePixelRatio,2), W=rideC.clientWidth, H=rideC.clientHeight;
+  if(rideC.width!==Math.round(W*dpr)){rideC.width=Math.round(W*dpr);rideC.height=Math.round(H*dpr)}
+  const g=rideC.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  const cs=getComputedStyle(document.documentElement), line=cs.getPropertyValue('--line').trim(), glow=cs.getPropertyValue('--glow').trim(), blue=cs.getPropertyValue('--blue').trim();
+  g.strokeStyle=line; g.lineWidth=1; g.beginPath(); g.moveTo(0,H/2); g.lineTo(W,H/2); g.stroke();
+  const scale=H/2/1.2; // ±1.2 cm fills the graph
+  const plot=(arr,col,wid)=>{g.strokeStyle=col;g.lineWidth=wid;g.lineJoin='round';g.beginPath();for(let i=0;i<RIDE_N;i++){const v=arr[(rideI+i)%RIDE_N];const x=i/(RIDE_N-1)*W,y=H/2-v*scale;i?g.lineTo(x,y):g.moveTo(x,y)}g.stroke()};
+  plot(rideW,glow,1.5); plot(rideB,blue,2.5);
+  rideFeel.textContent=`Body feels ${Math.round(feelSmooth)}% of the bumps`;
+}
+const dRough=$('d-rough'), dLock=$('d-lock');
+dRough.onclick=()=>{
+  roughOn=!roughOn; dRough.setAttribute('aria-pressed',String(roughOn)); shapeGround();
+  if(roughOn){ensureAudio(); if(!state.cruise&&!has('fwd')) setToggle('cruise',true); if(state.explodeT>0.05) setExplode(0);
+    if(!selected){const t=V(0,4.2,0);tweenTo(t,t.clone().add(V(6,6,40).multiplyScalar(fitK())))}}
+};
+dLock.onclick=()=>{state.locked=!state.locked; dLock.setAttribute('aria-pressed',String(state.locked)); dLock.textContent=state.locked?'Unlock the springs':'Lock the springs'};
+
 let last=performance.now();
 function frame(now){
   const rdt=Math.min(0.05,(now-last)/1000); last=now;
@@ -1080,13 +1159,18 @@ function frame(now){
   ground.position.set(-mod(state.pose.x,TILE),0,-mod(state.pose.z,TILE));
 
   // bumps under each wheel
-  const B={}; for(const [k,lx,lz] of [['FL',XF,-TZ],['FR',XF,TZ],['RL',XR,-TZ],['RR',XR,TZ]]){const [wx,wz]=wheelWorld(lx,lz);B[k]=onStand?0:bump(wx,wz)}
+  const B={}; for(const [k,lx,lz] of [['FL',XF,-TZ],['FR',XF,TZ],['RL',XR,-TZ],['RR',XR,TZ]]){const [wx,wz]=wheelWorld(lx,lz);B[k]=onStand?0:groundH(wx,wz)}
   const fAvg=(B.FL+B.FR)/2, rAvg=(B.RL+B.RR)/2, lAvg=(B.FL+B.RL)/2, rtAvg=(B.FR+B.RR)/2;
   const tgtHeave=(fAvg+rAvg)/2*0.9, tgtPitch=(fAvg-rAvg)/WB*0.9+clamp(accel,-200,200)*0.00012, tgtRoll=-(rtAvg-lAvg)/(2*TZ)*0.9+state.v*state.steer*0.0009;
-  const spring=(x,v,t,k=170,c=11)=>{const a=k*(t-x)-c*v;v+=a*dt;x+=v*dt;return[x,v]};
-  [state.heave,state.heaveV]=spring(state.heave,state.heaveV,tgtHeave);
-  [state.pitch,state.pitchV]=spring(state.pitch,state.pitchV,tgtPitch);
-  [state.roll,state.rollV]=spring(state.roll,state.rollV,tgtRoll);
+  if(state.locked){ // no springs: the body is bolted to the wheels and follows every bump
+    state.heave=(fAvg+rAvg)/2; state.pitch=(fAvg-rAvg)/WB; state.roll=-(rtAvg-lAvg)/(2*TZ); state.heaveV=state.pitchV=state.rollV=0;
+  }else{ // soft springs + damping: slow swells get through, quick bumps are soaked up
+    const spring=(x,v,t,k=80,c=9)=>{const a=k*(t-x)-c*v;v+=a*dt;x+=v*dt;return[x,v]};
+    [state.heave,state.heaveV]=spring(state.heave,state.heaveV,tgtHeave);
+    [state.pitch,state.pitchV]=spring(state.pitch,state.pitchV,tgtPitch);
+    [state.roll,state.rollV]=spring(state.roll,state.rollV,tgtRoll);
+  }
+  rideSample(dt,B.FL,state.heave+state.pitch*XF+state.roll*TZ,onStand); // front-left wheel vs the body just above it
   carRoot.position.y=e*2.5;
   sprung.position.y=state.heave*(1-e); sprung.rotation.z=state.pitch*(1-e); sprung.rotation.x=state.roll*(1-e);
   sprung.updateMatrix(); invSprung.copy(sprung.matrix).invert();
@@ -1203,21 +1287,26 @@ function frame(now){
   controls.update();
   sun.position.set(controls.target.x+16,34,controls.target.z+12); sun.target.position.set(controls.target.x,0,controls.target.z);
 
-  // labels
+  // labels: anchored to parts that don't spin, smoothed, laid out in a fixed order
   carRoot.updateMatrixWorld(true);
+  if(!labelAnchors) labelAnchors=buildLabelAnchors();
   const showAll=state.explode>0.55, bw=bay.clientWidth, bh=bay.clientHeight, placed=[];
+  const smooth=1-Math.exp(-rdt*14);
   for(const k of PART_ORDER){
-    const el=labelEls[k], vis=showAll||k===selected; if(!vis){el.hidden=true;continue}
-    const a=PARTS[k].anchor; if(!isShown(a)){el.hidden=true;continue} const bb=new THREE.Box3().setFromObject(a); const p=bb.getCenter(V()); p.y=bb.max.y+0.4;
-    p.project(camera); if(p.z>1){el.hidden=true;continue}
-    el.hidden=false; placed.push({el,x:(p.x+1)/2*bw,y:(1-p.y)/2*bh,w:el.offsetWidth||70,h:el.offsetHeight||24,sel:k===selected});
+    const el=labelEls[k], vis=showAll||k===selected, A=labelAnchors[k];
+    if(!vis||!isShown(A.obj)||(k==='wires'&&!wires[0].m.visible)){el.hidden=true;el._live=false;continue}
+    const p=A.obj.localToWorld(A.local.clone()).project(camera); if(p.z>1){el.hidden=true;el._live=false;continue}
+    const tx=(p.x+1)/2*bw, ty=(1-p.y)/2*bh;
+    if(!el._live){el._x=tx;el._y=ty;el._live=true}else{el._x+=(tx-el._x)*smooth;el._y+=(ty-el._y)*smooth}
+    el.hidden=false; placed.push({el,x:el._x,y:el._y,w:el.offsetWidth||70,h:el.offsetHeight||24});
   }
-  placed.sort((a,b)=>b.sel-a.sel||a.y-b.y);
+  placed.sort((a,b)=>(b.el.classList.contains('sel')?1:0)-(a.el.classList.contains('sel')?1:0));
   const done=[];
-  for(const L of placed){
+  for(const L of placed){ // selected label first, then catalogue order: same order every frame, so no flip-flopping
     for(let tries=0;tries<8;tries++){const hit=done.find(d=>Math.abs(d.x-L.x)<(d.w+L.w)/2+4&&Math.abs(d.y-L.y)<(d.h+L.h)/2+2); if(!hit)break; L.y=hit.y-(hit.h+L.h)/2-3;}
-    done.push(L); L.el.style.transform=`translate(${L.x}px,${L.y}px) translate(-50%,-100%)`;
+    done.push(L); L.el.style.transform=`translate(${Math.round(L.x)}px,${Math.round(L.y)}px) translate(-50%,-100%)`;
   }
+  drawRide();
 
   renderer.render(scene,camera);
   rRenderer.render(rScene,rCam);

@@ -1,4 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive 3D model of a 1:16 RC buggy for kids: drive it from the remote, take it apart, and see how the motor, gears, steering and springs work.">
 <title>Shuttle 08 Workshop</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='22' width='44' height='16' rx='5' fill='%231c5fe0'/%3E%3Ccircle cx='18' cy='42' r='9' fill='%23152238'/%3E%3Ccircle cx='46' cy='42' r='9' fill='%23152238'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Nunito:wght@500;600;700;800&display=swap">
@@ -35,7 +42,11 @@
   --blue:#5590ff; --blue-soft:#1a2a47; --on-blue:#07101f; --glow:#ff9a45; --glow-soft:#3a2614;
   --scene:#111925; --ground-tint:#77726c; --stage:#0f1621; color-scheme:dark;
 }
+:root{color-scheme:light}
+[hidden]{display:none!important}
 html,body{height:100%}
+body{margin:0}
+img{max-width:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;overflow:hidden}
 button{font:inherit;color:inherit}
 .app{display:grid;grid-template-columns:minmax(300px,360px) 1fr;height:100%}
@@ -122,7 +133,8 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
 }
 @media (prefers-reduced-motion:reduce){.hold,.flow button{transition:none}}
 </style>
-
+</head>
+<body>
 <div class="app">
   <aside class="bench" aria-label="Remote control and lesson controls">
     <header class="brand">
@@ -1315,3 +1327,5 @@ function frame(now){
 renderInfo();
 requestAnimationFrame(frame);
 </script>
+</body>
+</html>

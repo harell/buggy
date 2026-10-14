@@ -5,11 +5,11 @@ import { BATTERY, BUMPER, CHASSIS, HOOD, LIGHT_BAR, R, RING_R, ROOF, SHOCK, SIDE
 import { AXLE, DRIVE_TEETH, G1, MODULE, MOTOR, STEER_ARM, STEER_MODULE, STEER_TEETH } from '../core/gears';
 import { lerp, rng, TAU } from '../core/math';
 import {
-  armGeo, box, cylX, cylZ, DOWN, extrudeTop, extrudeXY, gearGeo, interpStations, panelGeo, put, RIM_SPOKES, rimShape, ringGeo, roundRectPts, springGeo, tube, tyreGeo, UP, V, type P2,
+  armGeo, box, cylX, cylZ, DOWN, extrudeTop, extrudeXY, facingGlow, gearGeo, interpStations, panelGeo, put, RIM_SPOKES, rimShape, ringGeo, roundRectPts, springGeo, tube, tyreGeo, UP, V, type P2,
 } from './geometry';
 import { MAT, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
 import {
-  B_PILLAR, FRONT_PANEL, hoodSection, surfHood, FRONT_PIVOT, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
+  B_PILLAR, FRONT_PANEL, hoodSection, surfHood, FRONT_PIVOT, POD, POD_ST, podBottom, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
   type Perforated,
 } from './mounts';
 import { canvasTex, decal, fontsReady, textTex } from './textures';
@@ -55,23 +55,24 @@ export const ANT_TIP = V(TUB.x0 + 1.0, 4.65, TUB.hw - 0.55); // far end of the a
 
 /* Body panels. */
 const FRAME_R = 0.11, PANEL_T = 0.07;
-/** Side pods: [x, outer half-width, top, how far the upper face steps in above the ledge]. */
-const POD_LEDGE = 5.2, POD_BOTTOM = 3.3;
-const POD_ST: readonly (readonly number[])[] = [
-  [SIDE_POD.frontX, SIDE_POD.wCockpit / 2 - 0.05, SIDE_POD.top - 0.1, 0.35], [SIDE_POD.frontX - 0.4, SIDE_POD.wCockpit / 2 - 0.02, SIDE_POD.top - 0.1, 0.38],
-  [0, SIDE_POD.wCockpit / 2, SIDE_POD.top, 0.4], [-2.0, 4.12, SIDE_POD.top + 0.1, 0.3], [SIDE_POD.wMaxX, SIDE_POD.wMax / 2, 7.15, 0.05],
-  [-4.0, 4.15, SIDE_POD.rearTop - 0.15, 0], [SIDE_POD.rearX, 4.0, SIDE_POD.rearTop, 0]];
-/** Right pod section drawn inner-top → outer-bottom; the left one is its mirror. */
-function podSection([, hw, top, inset]: readonly number[], s: number): P2[] {
-  const pts: P2[] = [[hw - 1.25, top - 0.3], [hw - 1.25, top], [hw - inset - 0.08, top - 0.03], [hw - inset, POD_LEDGE + 0.08], [hw - 0.02, POD_LEDGE], [hw, POD_BOTTOM + 0.2], [hw - 0.3, POD_BOTTOM]];
+/** Right pod section drawn inner-top → outer-bottom; the left one is its mirror. A sharp, nearly flat ledge splits it. */
+function podSection([x, hw, top, inset]: readonly number[], s: number): P2[] {
+  const y0 = podBottom(x), ledge = Math.max(POD.ledge, y0 + 0.3);
+  const crease = hw - Math.min(0.02, inset); // gone where the ledge has run out, so the WILD ROAD panel is flat
+  const pts: P2[] = [[hw - 1.25, top - 0.3], [hw - 1.25, top], [hw - inset - 0.08, top - 0.03], [hw - inset, ledge + 0.05], [hw - inset, ledge + 0.05], [crease, ledge],
+    [crease, ledge], [hw, Math.min(y0 + 0.2, ledge - 0.05)], [hw - 0.3, y0]];
   return s > 0 ? pts : pts.map(([z, y]): P2 => [-z, y]).reverse();
 }
-/** How far the pod's front edge leans forward at height y: from SIDE_POD.frontX at the bottom up toward the hood flare. */
-const podLean = (x: number, y: number) => Math.max(0, x - (SIDE_POD.frontX - 1.0)) * Math.max(0, y - POD_BOTTOM) * 0.35;
+/** Where the front arch meets the flat lower edge. */
+const ARCH_END = XF - Math.sqrt(POD.archF ** 2 - (POD.bottom - R) ** 2);
+/** Pod stations: the key ones, close ones over the front arch so the cut edge stays round, and the rear cut's start. */
+const POD_X = [...new Set([...POD_ST.map((r) => r[0]), ...Array.from({ length: 5 }, (_, i) => lerp(SIDE_POD.frontX, ARCH_END, (i + 1) / 5)), POD.cutX])].sort((a, b) => b - a);
+/** The pod's front edge is raked in a straight line (photos 12, 13): its top leans forward, its foot tucks behind the tyre. */
+const podRake = (x: number, y: number) => 0.9 * Math.max(0, 1 - (SIDE_POD.frontX - x) / 1.2) * Math.max(0, Math.min(1, (y - POD.bottom) / (POD_ST[0][2] - POD.bottom)));
 /** |z| of a pod's outer face at (x, y). */
 function podZ(x: number, y: number): number {
   const [, hw, top, inset] = interpStations(POD_ST, x);
-  return y <= POD_LEDGE ? hw : lerp(hw - inset, hw - inset - 0.08, Math.min(1, (y - POD_LEDGE) / (top - POD_LEDGE)));
+  return y <= POD.ledge ? hw : lerp(hw - inset, hw - inset - 0.08, Math.min(1, (y - POD.ledge) / (top - POD.ledge)));
 }
 /** A flat outline (x, y) laid onto a pod's outer face. */
 function onPod(pts: P2[], s: number): THREE.BufferGeometry {
@@ -79,15 +80,29 @@ function onPod(pts: P2[], s: number): THREE.BufferGeometry {
   for (let i = 0; i < p.count; i++) p.setZ(i, s * (podZ(p.getX(i), p.getY(i)) + 0.01));
   return g;
 }
-/** Roof plate: a deep U-notch at the front for the light bar, a wide shallow one at the rear, folded edges, front and rear legs. */
+/** The WILD ROAD frame on each pod's flat rear panel: front and rear x, top; its lower edge follows the pod's cut. */
+const wildBottom = (x: number) => podBottom(x) + 0.32;
+const WILD = { x0: -2.15, x1: -3.55, top: 6.4, y0: wildBottom(-2.15) } as const;
+/**
+ * Roof plate (photos 15, 17): waisted, with chamfered corners; a deep U-notch at the front, about half its width, between
+ * broad downturned legs (the light bar tucks under the plate there, its LEDs in the notch); a wide shallow notch at the
+ * rear; folded edges all round the sides.
+ */
 function roofGeo(): THREE.BufferGeometry {
-  const f = ROOF.frontX, r = ROOF.rearX, hw = ROOF.w / 2, nh = LIGHT_BAR.w / 2 + 0.05, nd = 0.75, rh = hw * 0.62;
-  const plate = extrudeTop([[f, -hw], [f, -nh], [f - nd, -nh], [f - nd, nh], [f, nh], [f, hw], [r, hw], [r, rh], [r + 0.35, rh - 0.15], [r + 0.35, -rh + 0.15], [r, -rh], [r, -hw]], PANEL_T, 0.02).translate(0, ROOF.top - PANEL_T, 0);
+  const f = ROOF.frontX, r = ROOF.rearX, hw = ROOF.w / 2, nh = 1.1, nd = 1.2, rh = hw * 0.62, cf = 0.2, cr = 0.35, mid = (f + r) / 2, waist = 0.3;
+  const side = (s: number): P2[] => [[f, s * (hw - cf)], [f - cf, s * hw], [mid + 0.9, s * hw], [mid, s * (hw - waist)], [mid - 0.9, s * hw], [r + cr, s * hw], [r, s * (hw - cr)]];
+  const outline: P2[] = [[f, -nh], [f - nd, -nh], [f - nd, nh], [f, nh], ...side(1), [r, rh], [r + 0.35, rh - 0.15], [r + 0.35, -rh + 0.15], [r, -rh], ...side(-1).reverse()];
+  const plate = extrudeTop(outline, PANEL_T, 0.02).translate(0, ROOF.top - PANEL_T, 0);
   const parts: THREE.BufferGeometry[] = [plate];
   for (const s of SIDES) {
-    parts.push(box(f - r, 0.3, PANEL_T).translate((f + r) / 2, ROOF.top - 0.15, s * (hw - 0.02)).toNonIndexed()); // folded edge
-    parts.push(box(PANEL_T, 0.95, hw - nh).translate(f - 0.03, ROOF.top - 0.47, (s * (hw + nh)) / 2).toNonIndexed()); // downturned front leg
-    parts.push(box(PANEL_T, 0.5, hw - rh).translate(r + 0.03, ROOF.top - 0.25, (s * (hw + rh)) / 2).toNonIndexed()); // short rear leg beside the notch
+    const e = side(s);
+    for (let k = 1; k < e.length - 2; k++) { // folded edge, following the waist and the chamfers
+      const [ax, az] = e[k], [bx, bz] = e[k + 1], L = Math.hypot(bx - ax, bz - az);
+      parts.push(box(L, 0.3, PANEL_T).rotateY(Math.atan2(-(bz - az), bx - ax)).translate((ax + bx) / 2, ROOF.top - 0.15, (az + bz) / 2 - s * 0.02).toNonIndexed());
+    }
+    const legIn = LIGHT_BAR.w / 2 + 0.05; // beside the light bar's ends, which tuck under the plate
+    parts.push(box(PANEL_T, 0.95, hw - cf - legIn).translate(f - 0.03, ROOF.top - 0.47, (s * (hw - cf + legIn)) / 2).toNonIndexed()); // downturned front leg
+    parts.push(box(PANEL_T, 0.5, hw - cr - rh).translate(r + 0.03, ROOF.top - 0.25, (s * (hw - cr + rh)) / 2).toNonIndexed()); // short rear leg beside the notch
   }
   return mergeGeometries(parts)!;
 }
@@ -97,15 +112,21 @@ function perforated({ outline, holes, hr }: Perforated): THREE.BufferGeometry {
   for (const [x, y] of holes) { const h = new THREE.Path(); h.absarc(x, y, hr, 0, TAU, true); s.holes.push(h); }
   return new THREE.ExtrudeGeometry(s, { depth: 0.06, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -0.03);
 }
-/** A decal laid out along u (text direction) and v (letter tops) from c, optionally pressed onto a curved surface. */
-function sticker(parent: THREE.Object3D, part: PartKey, tex: THREE.Texture, w: number, h: number, c: THREE.Vector3, u: THREE.Vector3, v: THREE.Vector3, surf?: (p: THREE.Vector3) => void): PartMesh {
-  const g = new THREE.PlaneGeometry(w, h, 16, 4), p = g.getAttribute('position'), q = V();
+/** Sticker finish: matte vinyl, so dark ink stays dark instead of mirroring the sky (the paint under it is toned down too). */
+const VINYL = { roughness: 0.6, metalness: 0, envMapIntensity: 0.3 } as const, INK_VINYL = { roughness: 0.8, metalness: 0, envMapIntensity: 0.15 } as const;
+/**
+ * A decal laid out along u (text direction) and v (letter tops) from c, optionally pressed onto a curved surface. A
+ * pressed one is cut about every 0.15 so its chords follow the surface instead of sinking into it at the creases.
+ */
+function sticker(parent: THREE.Object3D, part: PartKey, tex: THREE.Texture, w: number, h: number, c: THREE.Vector3, u: THREE.Vector3, v: THREE.Vector3, surf?: (p: THREE.Vector3) => void,
+  finish: THREE.MeshStandardMaterialParameters = VINYL): PartMesh {
+  const g = surf ? new THREE.PlaneGeometry(w, h, Math.max(16, Math.ceil(w / 0.15)), Math.max(4, Math.ceil(h / 0.15))) : new THREE.PlaneGeometry(w, h), p = g.getAttribute('position'), q = V();
   for (let i = 0; i < p.count; i++) {
     q.copy(c).addScaledVector(u, p.getX(i)).addScaledVector(v, p.getY(i)); surf?.(q);
     p.setXYZ(i, q.x, q.y, q.z);
   }
   g.computeVertexNormals();
-  const m = mk(g, () => new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.35, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -4, depthWrite: false }), part, { cast: false });
+  const m = mk(g, () => new THREE.MeshStandardMaterial({ map: tex, transparent: true, ...finish, polygonOffset: true, polygonOffsetFactor: -4, depthWrite: false }), part, { cast: false });
   parent.add(m);
   return m;
 }
@@ -116,10 +137,13 @@ const std = (o: THREE.MeshStandardMaterialParameters) => (): StdMat => new THREE
 /** The real car's finishes (measured from the blue car's photos). */
 const M = {
   shell: (): StdMat => new THREE.MeshPhysicalMaterial({ color: 0x1550f0, metalness: 0.5, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: 0.6, side: THREE.DoubleSide }),
+  /** The same paint on the near-horizontal roof and hood, which face the bright sky: less clearcoat so they stay blue from above. */
+  shellTop: (): StdMat => new THREE.MeshPhysicalMaterial({ color: 0x1248d8, metalness: 0.45, roughness: 0.48, clearcoat: 0.35, clearcoatRoughness: 0.4, envMapIntensity: 0.3, side: THREE.DoubleSide }),
   plastic: std({ color: 0x1e1f22, roughness: 0.5, metalness: 0.05 }),
   plasticDark: std({ color: 0x18191c, roughness: 0.62, metalness: 0.03 }),
   tyre: std({ color: 0x1c1f22, roughness: 0.8, envMapIntensity: 1 }), // a little sheen, so the lugs read on the shaded side
-  rim: std({ color: 0x0b0b14, roughness: 0.28, metalness: 0.25 }),
+  /** Satin dark-grey spokes whose broad faces catch the light against the near-black interior (photo 28). */
+  rim: (): StdMat => new THREE.MeshPhysicalMaterial({ color: 0x2c3039, roughness: 0.3, metalness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.1, envMapIntensity: 1.3 }),
   ring: std({ color: 0xb0bec8, roughness: 0.6, metalness: 0.1 }),
   spring: std({ color: 0xdde2e8, metalness: 0.95, roughness: 0.18 }),
   vent: std({ color: 0x0c0d0f, roughness: 0.8, side: THREE.DoubleSide }),
@@ -144,6 +168,7 @@ function screwHeads(list: readonly (readonly [THREE.Vector3, Readonly<THREE.Vect
 }
 
 const v3 = (pts: [number, number, number][]) => pts.map((p) => V(...p));
+const glowFwd = V(), glowEye = V(), glowPos = V();
 const SIDES = [-1, 1] as const;
 
 export function buildCar(scene: THREE.Scene): Car {
@@ -167,7 +192,7 @@ export function buildCar(scene: THREE.Scene): Car {
     // front shock towers beside the hood's front corners, each with a round boss for the shock's top eye
     for (const s of SIDES) {
       const t = FRONT_SHOCK_TOP(s);
-      c(extrudeXY([[t.x - 0.75, y0 + 1.7], [t.x + 0.55, y0 + 1.7], [t.x + 0.3, t.y + 0.1], [t.x - 0.3, t.y + 0.1]], 0.36, 0.03), 0, 0, s * (t.z - 0.42));
+      c(extrudeXY([[t.x - 0.75, y0 + 1.7], [t.x + 0.45, y0 + 1.7], [t.x + 0.1, t.y - 0.2], [t.x - 0.45, t.y - 0.2]], 0.24, 0.03), 0, 0, t.z - s * 0.4); // slim, just inboard of its own boss
       c(new THREE.CylinderGeometry(0.27, 0.27, 0.45, 18).rotateZ(Math.PI / 2), t.x - 0.33, t.y, t.z); // behind the eye, so its screw shows
     }
     // battery cover: one screw at a rear corner, a tab at the other, moulded print
@@ -216,7 +241,7 @@ export function buildCar(scene: THREE.Scene): Car {
     sh.lineTo(-hw + r, len); sh.quadraticCurveTo(-hw, len, -hw, len - r); sh.lineTo(-hw, r); sh.quadraticCurveTo(-hw, 0, -hw + r, 0);
     const plate = new THREE.ExtrudeGeometry(sh, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 1 }).rotateY(Math.PI / 2).rotateZ(-Math.atan2(0.55, BUMPER.top - BUMPER.bottom));
     plate.computeBoundingBox(); plate.translate(BUMPER.faceX - plate.boundingBox!.max.x, BUMPER.bottom - plate.boundingBox!.min.y, 0);
-    pBumper.add(mk(plate, M.plastic, 'chassis'));
+    pBumper.add(mk(plate, std({ color: 0x2b2e34, roughness: 0.36, metalness: 0.08 }), 'chassis')); // satin, so it reads as a plate, not a hole
     pBumper.add(put(mk(box(NOSE_X - 9.2 + 1.5, 0.45, 2.2), M.plastic, 'chassis'), (NOSE_X + 9.2) / 2 + 0.2, BUMPER.bottom + 0.15, 0)); // mount to the nose
     const h = BUMPER.hoopW / 2 - 0.14, hy = BUMPER.bottom - 0.35;
     pBumper.add(mk(tube(v3([[NOSE_X - 0.6, hy + 0.15, -1.6], [NOSE_X + 0.1, hy, -h + 0.25], [NOSE_X + 0.75, hy + 0.05, -h], [BUMPER.faceX - 0.45, hy + 0.2, -h + 0.7],
@@ -227,13 +252,13 @@ export function buildCar(scene: THREE.Scene): Car {
   /* ---- Body: painted metal panels screwed to a moulded black plastic frame; they lift off together ---- */
   const BODY_EX = V(0, 9, 0);
   const pBody = piece('body', sprung, BODY_EX);
-  const roof = mk(roofGeo(), M.shell, 'body');
+  const roof = mk(roofGeo(), M.shellTop, 'body');
   {
     const bar = (pts: [number, number, number][], r = FRAME_R) => pBody.add(mk(tube(v3(pts), r, 8 * pts.length, 8), M.plastic, 'body'));
-    pBody.add(mk(panelGeo(HOOD_ST.map(([x, hw, y]) => ({ x, pts: hoodSection(hw, y) })), PANEL_T), M.shell, 'body'));
-    for (const s of SIDES) {
-      const pod = panelGeo(POD_ST.map((row) => ({ x: row[0], pts: podSection(row, s) })), PANEL_T), p = pod.getAttribute('position');
-      for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) + podLean(p.getX(i), p.getY(i)));
+    pBody.add(mk(panelGeo(HOOD_ST.map(([x, hw, y]) => ({ x, pts: hoodSection(hw, y) })), PANEL_T, { capStart: true }), M.shellTop, 'body')); // the nose folds down closed
+    for (const s of SIDES) { // each pod's raked front is a closed, flat painted face
+      const pod = panelGeo(POD_X.map((x) => ({ x, pts: podSection(interpStations(POD_ST, x), s) })), PANEL_T, { capStart: true }), p = pod.getAttribute('position');
+      for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) + podRake(p.getX(i), p.getY(i)));
       pod.computeVertexNormals();
       pBody.add(mk(pod, M.shell, 'body'));
     }
@@ -264,15 +289,16 @@ export function buildCar(scene: THREE.Scene): Car {
     const ps = (x: number, y: number, s: number) => V(x, y, s * (podZ(x, y) + 0.02));
     pBody.add(mk(screwHeads([
       [hs(HOOD.rearX + 0.35, -2.3), UP], [hs(HOOD.rearX + 0.35, 2.3), UP], [hs(HOOD.tipX - 0.45, 0), UP],
-      // pods: just ahead of the '08', at the WILD ROAD frame's lower front corner, and up at the rear corner
-      ...SIDES.flatMap((s) => [[ps(2.8, 4.7, s), V(0, 0, s)], [ps(-2.3, 4.0, s), V(0, 0, s)], [ps(-4.45, 6.25, s), V(0, 0, s)]] as const),
-      [V(ROOF.frontX - 0.3, ROOF.top + 0.01, -1.8), UP], [V(ROOF.frontX - 0.3, ROOF.top + 0.01, 1.8), UP], [V(ROOF.rearX + 0.6, ROOF.top + 0.01, 0), UP],
+      // pods: just ahead of the '08', just ahead of the WILD ROAD frame's lower front corner, and up at the rear corner
+      ...SIDES.flatMap((s) => [[ps(3.3, 5.05, s), V(0, 0, s)], [ps(WILD.x0 + 0.22, POD.bottom + 0.45, s), V(0, 0, s)], [ps(-4.35, 6.45, s), V(0, 0, s)]] as const),
+      [V(ROOF.frontX - 0.3, ROOF.top + 0.02, -1.8), UP], [V(ROOF.frontX - 0.3, ROOF.top + 0.02, 1.8), UP], [V(ROOF.rearX + 0.6, ROOF.top + 0.02, 0), UP],
       [V(ROOF.rearX - 0.11, TUB.top + 0.45, -1.2), V(-1, 0, 0)], [V(ROOF.rearX - 0.11, TUB.top + 0.45, 1.2), V(-1, 0, 0)],
     ], 0.14), M.screw, 'body'));
-    // pod vents: an upper slot with chamfered corners and a long lower slot with an angled front, black frame behind
+    // pod vents: an elongated upper window with chamfered corners above the ledge, and a long thin slot with an
+    // angled front end under SHUTTLE, black frame behind
     for (const s of SIDES) {
-      pBody.add(mk(onPod([[-0.9, 5.65], [1.35, 5.65], [1.65, 5.95], [1.35, 6.3], [-0.6, 6.3], [-0.9, 6.0]], s), M.vent, 'body', { cast: false }));
-      pBody.add(mk(onPod([[-1.85, 3.8], [1.45, 3.8], [1.2, 3.97], [-1.85, 4.6]], s), M.vent, 'body', { cast: false })); // tall at the rear, its top sloping down under SHUTTLE
+      pBody.add(mk(onPod([[-1.75, 6.08], [-1.75, 5.85], [-1.55, 5.65], [0.05, 5.65], [-0.3, 6.3], [-1.55, 6.3]], s), M.vent, 'body', { cast: false }));
+      pBody.add(mk(onPod([[-1.7, 3.95], [0.85, 3.95], [1.2, 4.3], [-1.7, 4.42]], s), M.vent, 'body', { cast: false })); // ends clear of the '08'
     }
   }
 
@@ -297,13 +323,19 @@ export function buildCar(scene: THREE.Scene): Car {
       lightBar.add(put(mk(cylX(lr + 0.04, 0.12, 20), MAT.chrome, 'lights'), 0.24, 0, z)); // recessed bezel cup
       const lens = put(mk(new THREE.SphereGeometry(lr, 20, 10, 0, TAU, 0, Math.PI / 2), () => new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.25, emissive: 0xe8f1ff, emissiveIntensity: 2 }), 'lights', { led: true }), 0.27, 0, z, 0, 0, -Math.PI / 2);
       lens.scale.set(1, 0.55, 1); lightBar.add(lens); leds.push(lens);
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-      spr.position.set(0.55, 0, z); spr.scale.set(1.9, 1.9, 1);
+      // a small glow in front of each lens that shows only when the lenses face the viewer
+      const glowMat = new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+      const spr = new THREE.Sprite(glowMat);
+      spr.position.set(0.45, 0, z); spr.scale.set(0.95, 0.95, 1);
+      spr.onBeforeRender = (_r, _s, cam) => {
+        glowFwd.setFromMatrixColumn(spr.matrixWorld, 0);
+        glowMat.opacity = facingGlow(glowFwd, glowEye.setFromMatrixPosition(cam.matrixWorld).sub(glowPos.setFromMatrixPosition(spr.matrixWorld)));
+      };
       lightBar.add(spr); ledGlows.push(spr);
     }
   }
   const headlight = new THREE.SpotLight(0xf2f6ff, 0, 140, 0.42, 0.6, 0);
-  headlight.position.set(LB.x + 0.4, LB.y, 0); pLights.add(headlight);
+  headlight.position.set(HOOD.tipX + 0.3, LB.y, 0); pLights.add(headlight); // ahead of the hood's nose, so it lights the ground, not the car
   const hlTarget = new THREE.Object3D(); hlTarget.position.set(40, -6, 0); pLights.add(hlTarget); headlight.target = hlTarget;
 
   /* ---- Battery: one 14500 cell lying across the car at the front of the underside bay ---- */
@@ -482,6 +514,12 @@ export function buildCar(scene: THREE.Scene): Car {
     const gx = GEARBOX.x0 - 0.2, gz = 1.3;
     for (const s of SIDES) bar([[MOTOR.x - 0.2, MOTOR.y - 1.13, s * gz], [gx + 0.2, 2.15, s * gz], [gx, 2.5, s * gz], [gx, 4.8, s * gz], [gx + 0.45, 5.85, s * 1.2], [-9.15, 6.3, s * 1.0]]); // foot, upright, hoop over the lobe
     for (const y of [2.5, 3.6, 4.8]) bar([[gx, y, -gz], [gx, y, gz]], 0.1); // rungs
+    // two rails each side that sweep out from the uprights and wrap round behind the rear tyres, joined at their ends
+    const wrap = (s: number, y: number): [number, number, number][] => [[gx, y, s * gz], [gx - 0.25, y, s * 2.6], [gx - 0.15, y, s * 3.9], [XR - R - 0.2, y, s * (TZR - 1.0)]];
+    for (const s of SIDES) {
+      for (const y of [3.6, 4.8]) w(tube(v3(wrap(s, y)), 0.11, 16, 6)); // gentle curves: few segments do
+      w(tube(v3([[XR - R - 0.2, 3.6, s * (TZR - 1.0)], [XR - R - 0.22, 4.2, s * (TZR - 0.98)], [XR - R - 0.2, 4.8, s * (TZR - 1.0)]]), 0.11, 8, 6));
+    }
   }
   const pMotor = piece('motor', ru, V(-1, 1, 7)); // it slides out to the right, as on the real car
   const MZ = MOTOR_Z; // the can's inner end; the pinion sits just inboard of it
@@ -535,23 +573,24 @@ export function buildCar(scene: THREE.Scene): Car {
   /* ---- Wheels: mud-terrain tyre, 5-spoke black rim, flat grey ring, one centre screw ---- */
   const TYRE = tyreGeo(R, TYRE_W, { bead: RING_R });
   const RING = ringGeo(RING_R).translate(0, 0, TYRE_W / 2 - 0.32);
-  const RIM_FACE = new THREE.ExtrudeGeometry(rimShape(RING_R * 0.8), { depth: 0.2, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.03, bevelSegments: 1, curveSegments: 20 }).translate(0, 0, TYRE_W / 2 - 0.58);
+  // deep spokes with rounded edges, so the openings read as holes onto the dark interior
+  const RIM_FACE = new THREE.ExtrudeGeometry(rimShape(RING_R * 0.8), { depth: 0.42, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.04, bevelSegments: 1, curveSegments: 16 }).translate(0, 0, TYRE_W / 2 - 0.81);
   const RIM_BARREL = (() => {
     const g = new THREE.LatheGeometry([[RING_R * 0.8, TYRE_W / 2 - 0.4], [RING_R + 0.02, TYRE_W / 2 - 0.4], [RING_R + 0.02, -TYRE_W / 2 + 0.25], [0.5, -TYRE_W / 2 + 0.25], [0.5, TYRE_W / 2 - 0.6]].map(([r, h]) => new THREE.Vector2(r, h)), 40).rotateX(Math.PI / 2);
     return g;
   })();
   const HUB = (() => {
-    const parts: THREE.BufferGeometry[] = [cylZ(0.36, 0.5, 20).translate(0, 0, TYRE_W / 2 - 0.62)];
+    const parts: THREE.BufferGeometry[] = []; // round bosses standing out of the rim face's solid centre
     for (let k = 0; k < RIM_SPOKES; k++) { const a = Math.PI / RIM_SPOKES + (k / RIM_SPOKES) * TAU; parts.push(cylZ(0.07, 0.16, 8).translate(0.42 * Math.cos(a), 0.42 * Math.sin(a), TYRE_W / 2 - 0.36)); }
     parts.forEach((p) => p.deleteAttribute('uv'));
     return mergeGeometries(parts)!;
   })();
-  const SCREW = screwHeads([[V(0, 0, TYRE_W / 2 - 0.36), V(0, 0, 1)]], 0.2);
+  const SCREW = screwHeads([[V(0, 0, TYRE_W / 2 - 0.33), V(0, 0, 1)]], 0.2); // on the rim face
   const makeWheel = (front: boolean, side: -1 | 1): Wheel => {
     const outer = piece('wheels', root, V(0, 0, side * 7), true);
     const spin = new THREE.Group(); outer.add(spin);
     spin.add(mk(TYRE, M.tyre, 'wheels'));
-    spin.add(mk(RIM_BARREL, () => new THREE.MeshStandardMaterial({ color: 0x070709, roughness: 0.85, metalness: 0, envMapIntensity: 0.2, side: THREE.DoubleSide }), 'wheels')); // matte, so the openings read black
+    spin.add(mk(RIM_BARREL, () => new THREE.MeshStandardMaterial({ color: 0x030304, roughness: 0.95, metalness: 0, envMapIntensity: 0.05, side: THREE.DoubleSide }), 'wheels')); // dark matte, so the openings read deep
     spin.add(mk(RIM_FACE, M.rim, 'wheels'));
     spin.add(mk(HUB, M.rim, 'wheels'));
     spin.add(mk(RING, M.ring, 'wheels'));
@@ -597,22 +636,32 @@ export function buildCar(scene: THREE.Scene): Car {
 
   /* ---- Decals (blue car), drawn once the display font is ready ---- */
   const decalsReady = fontsReady.then(() => {
-    const W = '#e6f0f6', INK = '#273f61';
-    const big08 = textTex('08', { w: 256, h: 200, size: 190, color: INK });
+    const W = '#e6f0f6';
+    const INK = '#0b111c'; // near-black on the blue
+    const big08 = textTex('08', { w: 256, h: 200, size: 190, color: INK, italic: false }); // upright and rounded (photos 15, 17)
     const roofShuttle = textTex('SHUTTLE', { w: 512, h: 96, size: 78, color: W });
     const hoodShuttle = textTex('SHUTTLE', { size: 100, color: W, letter: 3 });
-    const pod08 = textTex('08', { w: 256, h: 200, size: 190, color: INK, italic: false, weight: 600 });
+    const pod08 = textTex('08', { w: 256, h: 200, size: 190, color: INK, italic: false });
     const podShuttle = textTex('SHUTTLE', { size: 96, color: W, letter: 2 });
-    const wildFrame = canvasTex(512, 300, (g, w, h) => { // its top edge faces forward; the words sit in the rear half
-      g.strokeStyle = W; g.lineWidth = 12; g.strokeRect(10, 10, w - 20, h - 20);
-      g.fillStyle = W; g.font = 'italic 700 80px "Chakra Petch","Arial Black",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('WILD ROAD', w / 2, h * 0.66);
+    // the WILD ROAD frame: an upright front edge and a flat top, its lower edge slanting up parallel to the pod's cut
+    // (photos 12, 22), the words in its rear half. The canvas runs along the words (up the left pod, down the right
+    // one) and from the frame's front (its top row) to its rear.
+    const wildFrame = (s: number) => canvasTex(512, 300, (g, w, h) => {
+      const cu = (y: number) => (s < 0 ? y - WILD.y0 : WILD.top - y) / (WILD.top - WILD.y0) * w, cv = (x: number) => ((WILD.x0 - x) / (WILD.x0 - WILD.x1)) * h, e = 0.06;
+      const corners: P2[] = [[WILD.x0 - e, wildBottom(WILD.x0 - e) + e], [WILD.x0 - e, WILD.top - e], [WILD.x1 + e, WILD.top - e], [WILD.x1 + e, wildBottom(WILD.x1 + e) + e]];
+      g.strokeStyle = W; g.lineWidth = 12; g.lineJoin = 'miter'; g.beginPath();
+      corners.forEach(([x, y], i) => (i ? g.lineTo(cu(y), cv(x)) : g.moveTo(cu(y), cv(x)))); g.closePath(); g.stroke();
+      const xt = lerp(WILD.x0, WILD.x1, 0.64), a = cu(wildBottom(xt) + 0.12), b = cu(WILD.top - 0.12);
+      g.fillStyle = W; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'italic 700 64px "Chakra Petch","Arial Black",sans-serif';
+      const fit = Math.min(1, (0.92 * Math.abs(b - a)) / g.measureText('WILD ROAD').width);
+      g.font = `italic 700 ${Math.floor(64 * fit)}px "Chakra Petch","Arial Black",sans-serif`; g.fillText('WILD ROAD', (a + b) / 2, cv(xt));
     });
     const wingText = textTex('WILD ROAD', { w: 1024, h: 160, size: 112, letter: 4, color: '#b1cbdb' });
     const stripe = canvasTex(16, 16, (g, w, h) => { g.fillStyle = W; g.fillRect(0, 0, w, h); });
     const X = V(1, 0, 0), Y = V(0, 1, 0), Z = V(0, 0, 1), NX = V(-1, 0, 0), NZ = V(0, 0, -1), NY = V(0, -1, 0);
     // roof and wing read from the front; the hood reads from the left side, front to rear
-    sticker(pBody, 'body', roofShuttle, 1.7, 0.32, V(-0.45, ROOF.top + 0.01, 0), NZ, NX);
-    sticker(pBody, 'body', big08, 2.0, 1.55, V(-1.55, ROOF.top + 0.01, 0), NZ, NX);
+    sticker(pBody, 'body', roofShuttle, 1.7, 0.32, V(-0.45, ROOF.top + 0.03, 0), NZ, NX); // above the plate's bevel
+    sticker(pBody, 'body', big08, 2.0, 1.55, V(-1.55, ROOF.top + 0.03, 0), NZ, NX, undefined, INK_VINYL);
     const onHood = (p: THREE.Vector3) => { p.y = surfHood(p.x, p.z) + 0.012; };
     sticker(pBody, 'body', hoodShuttle, 3.4, 0.85, V(4.6, 0, 0), NX, Z, onHood);
     sticker(pBody, 'body', stripe, HOOD.tipX - 0.75 - 6.35, 0.07, V((6.35 + HOOD.tipX - 0.75) / 2, 0, 0), NX, Z, onHood);
@@ -620,9 +669,9 @@ export function buildCar(scene: THREE.Scene): Car {
       const onSide = (p: THREE.Vector3) => { p.z = s * (podZ(p.x, p.y) + 0.012); };
       const along = s < 0 ? NX : X; // reading direction as seen from that side
       // sized from photo 12: the '08' about 1.5 × 0.85 just behind the pod's front, SHUTTLE ending just behind it
-      sticker(pBody, 'body', pod08, 1.7, 1.3, V(1.85, 4.45, 0), along, Y, onSide);
-      sticker(pBody, 'body', podShuttle, 2.2, 0.56, V(-0.05, 4.78, 0), along, Y, onSide);
-      sticker(pBody, 'body', wildFrame, 2.3, 1.4, V(-2.85, 5.0, 0), s < 0 ? Y : NY, X, onSide); // reads bottom to top on the left
+      sticker(pBody, 'body', pod08, 1.7, 1.3, V(2.15, 4.62, 0), along, Y, onSide, INK_VINYL);
+      sticker(pBody, 'body', podShuttle, 2.2, 0.56, V(0.4, 5.05, 0), along, Y, onSide);
+      sticker(pBody, 'body', wildFrame(s), WILD.top - WILD.y0, WILD.x0 - WILD.x1, V((WILD.x0 + WILD.x1) / 2, (WILD.top + WILD.y0) / 2, 0), s < 0 ? Y : NY, X, onSide); // reads bottom to top on the left
     }
     sticker(wing, 'chassis', wingText, 5.4, 0.85, V(WING.trailX + 1.1, WING_Y(WING.trailX + 1.1) + 0.06, 0), NZ, NX);
   });

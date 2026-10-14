@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { R, RING_R, TYRE_W } from '../src/core/dims';
 import {
-  circleInPolygon, gearGeo, interpStations, lowerArmShape, panelGeo, RIM_SPOKES, rimShape, RING_BOLTS, ringGeo, roundRectPts, springGeo, springPoints, TYRE_LUGS, tyreGeo,
+  circleInPolygon, facingGlow, gearGeo, interpStations, lowerArmShape, panelGeo, RIM_SPOKES, rimShape, RING_BOLTS, ringGeo, roundRectPts, springGeo, springPoints, TYRE_LUGS, tyreGeo,
   type P2,
 } from '../src/model/geometry';
 
@@ -88,6 +88,21 @@ describe('wheels', () => {
     expect(onLug(0, 0.7)).toBe(true); expect(onLug(0, -0.7)).toBe(false); expect(onLug(step / 2, -0.7)).toBe(true);
   });
 
+  it('rounds the shoulders and ends the lugs on the sidewall, above plain rubber', () => {
+    const mesh = new THREE.Mesh(tyreGeo(R, TYRE_W), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })), ray = new THREE.Raycaster(), hw = TYRE_W / 2;
+    const radial = (a: number, z: number) => { ray.set(new THREE.Vector3(5 * Math.cos(a), 5 * Math.sin(a), z), new THREE.Vector3(-Math.cos(a), -Math.sin(a), 0)); return 5 - ray.intersectObject(mesh)[0].distance; };
+    const side = (a: number, rr: number) => { ray.set(new THREE.Vector3(rr * Math.cos(a), rr * Math.sin(a), 3), new THREE.Vector3(0, 0, -1)); return 3 - (ray.intersectObject(mesh)[0]?.distance ?? Infinity); };
+    expect(radial(0, hw - 0.03)).toBeLessThan(R - 0.12); // the shoulder is rounded, not square
+    expect(radial(0, 0.4)).toBeLessThan(R - 0.003); // and the tread is crowned
+    expect(radial(0, hw - 0.2)).toBeLessThan(R - 0.06); // a broad, round shoulder,
+    expect(radial(0, hw - 0.35)).toBeLessThan(R - 0.02); // which starts falling away well inside the edge
+    expect(side(0, R - 0.5)).toBeCloseTo(hw, 2); // a lug wraps down onto the sidewall here
+    for (let i = 0; i < 24; i++) { // none reaches this low: the ray meets the plain sidewall
+      const z = side(((i + 0.37) / 24) * 2 * Math.PI, R - 1.1); // off the lathe seams
+      expect(z).toBeLessThan(hw - 0.05); expect(z).toBeGreaterThan(hw - 0.2);
+    }
+  });
+
   it('has a flat grey ring exactly RING_R across with 5 bolt circles 72° apart', () => {
     const thick = 0.12, g = ringGeo(RING_R, RING_R * 0.79, thick), p = g.getAttribute('position');
     expect(radial(g).rMax).toBeCloseTo(RING_R, 3);
@@ -107,6 +122,14 @@ describe('wheels', () => {
     expect(s.holes).toHaveLength(2 * RIM_SPOKES + 1); // 5 openings, 5 gaps in the Ys, and the axle hole
     const big = s.holes.filter((h) => Math.abs(THREE.ShapeUtils.area(h.getPoints())) > 0.1);
     expect(big).toHaveLength(RIM_SPOKES);
+  });
+
+  it('keeps the spokes broad: the openings take about half the face between the hub and the lip (photo 28)', () => {
+    const rLip = RING_R - 0.3, s = rimShape(rLip);
+    const open = s.holes.map((h) => Math.abs(THREE.ShapeUtils.area(h.getPoints()))).filter((a) => a > 0.1).reduce((a, b) => a + b, 0);
+    const band = Math.PI * ((0.9 * rLip) ** 2 - (0.4 * rLip) ** 2);
+    expect(open / band).toBeGreaterThan(0.35);
+    expect(open / band).toBeLessThan(0.55);
   });
 });
 
@@ -129,6 +152,25 @@ describe('folded panels', () => {
   });
 });
 
+describe('closed panel ends', () => {
+  const sec: P2[] = [[-2, 4], [-2, 5], [2, 5], [2, 4]];
+  const hitsAt = (g: THREE.BufferGeometry, x0: number, dir: number) => {
+    const ray = new THREE.Raycaster(new THREE.Vector3(x0, 4.4, 0.3), new THREE.Vector3(dir, 0, 0));
+    return ray.intersectObject(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))).map((h) => {
+      expect(h.face!.normal.x * dir).toBeLessThan(0); // it faces out, toward the viewer
+      return h.point.x;
+    });
+  };
+  it('leaves the ends open by default, and caps the asked-for end with a flat face closed by its chord', () => {
+    const st = [{ x: 3, pts: sec }, { x: 0, pts: sec }];
+    expect(hitsAt(panelGeo(st, 0.08), 10, -1)).toHaveLength(0); // through the open section
+    const front = hitsAt(panelGeo(st, 0.08, { capStart: true }), 10, -1);
+    expect(front[0]).toBeCloseTo(3, 6);
+    expect(front).toHaveLength(1);
+    expect(hitsAt(panelGeo(st, 0.08, { capEnd: true }), -10, 1)[0]).toBeCloseTo(0, 6);
+  });
+});
+
 describe('front arm', () => {
   it('is one plate with two rectangular windows', () => {
     const g = lowerArmShape(1.8, 1.0);
@@ -148,5 +190,22 @@ describe('coil springs', () => {
     const turn = (k: number) => p[k * 16].y - p[(k + 1) * 16].y;
     expect(turn(0)).toBeLessThan(turn(4) / 3);
     expect(turn(8)).toBeLessThan(turn(4) / 3);
+  });
+});
+
+describe('LED glow', () => {
+  const fwd = new THREE.Vector3(1, 0, 0);
+  const from = (deg: number) => facingGlow(fwd, new THREE.Vector3(Math.cos((deg * Math.PI) / 180), 0, Math.sin((deg * Math.PI) / 180)));
+  it('is full seen head-on and gone from the side and the back', () => {
+    expect(from(0)).toBeCloseTo(1, 6);
+    expect(from(90)).toBe(0);
+    expect(from(-90)).toBe(0);
+    expect(from(180)).toBe(0);
+  });
+  it('fades smoothly as the viewer moves off the lenses\' axis, whatever the length of the vectors', () => {
+    const a = [0, 20, 40, 60, 75].map(from);
+    for (let i = 1; i < a.length; i++) expect(a[i]).toBeLessThanOrEqual(a[i - 1]);
+    expect(a[2]).toBeGreaterThan(0); expect(a[2]).toBeLessThan(1);
+    expect(facingGlow(fwd.clone().multiplyScalar(3), new THREE.Vector3(10, 0, 0))).toBeCloseTo(1, 6);
   });
 });

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { R, SHOCK, TZF, XF } from '../src/core/dims';
+import { R, SHOCK, SIDE_POD, TZF, XF, XR } from '../src/core/dims';
 import { AXLE, DRIVE_TEETH, G1, MODULE, MOTOR, pitchRadius } from '../src/core/gears';
 import { STEER_MAX } from '../src/core/vehicle';
-import { circleInPolygon, UP, V } from '../src/model/geometry';
+import { circleInPolygon, interpStations, UP, V } from '../src/model/geometry';
 import {
-  FRONT_PANEL, FRONT_SHOCK_LOW, FRONT_SHOCK_TOP, GEARBOX_OUTLINE, KNUCKLE, kingpinSwing, PIVOT, RACK_END, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP,
-  STEER_ARM_END, swingFor,
+  FRONT_PANEL, FRONT_SHOCK_LOW, LEDGE_END, FRONT_SHOCK_TOP, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, kingpinSwing, PIVOT, POD, POD_ST, podBottom, RACK_END, REAR_PANEL, REAR_SHOCK_LOW,
+  REAR_SHOCK_TOP, STEER_ARM_END, surfHood, swingFor,
 } from '../src/model/mounts';
 
 const SIDES = [-1, 1] as const;
@@ -68,5 +68,44 @@ describe('perforated frame panels', () => {
     const [a, b] = [...rows.values()].map((r) => Math.max(...r));
     expect(Math.abs(a - b)).toBeGreaterThan(REAR_PANEL.hr); // staggered
     expect(FRONT_PANEL.holes).toHaveLength(3);
+  });
+});
+
+describe('body panels', () => {
+  const descending = (xs: number[]) => xs.every((x, i) => i === 0 || x < xs[i - 1]);
+
+  it('gives the hood one station per x, from the nose back to the cockpit', () => {
+    expect(descending(HOOD_ST.map((r) => r[0]))).toBe(true);
+  });
+
+  it('runs each side pod from just behind the front tyre back to the B-pillar, its top sweeping up', () => {
+    const xs = POD_ST.map((r) => r[0]), tops = POD_ST.map((r) => r[2]);
+    expect(descending(xs)).toBe(true);
+    expect(xs[0]).toBe(SIDE_POD.frontX);
+    expect(xs[xs.length - 1]).toBe(SIDE_POD.rearX);
+    expect(tops.every((t, i) => i === 0 || t >= tops[i - 1])).toBe(true); // never dips going back
+    expect(Math.abs(tops[0] - surfHood(SIDE_POD.frontX, 0))).toBeLessThan(0.3); // low at the front, about hood height
+    expect(tops[tops.length - 1]).toBeCloseTo(SIDE_POD.rearTop, 6);
+  });
+
+  it('cuts the pod\'s lower edge clear of both tyres, flat and low between them', () => {
+    expect(podBottom(0)).toBe(POD.bottom);
+    expect(podBottom(SIDE_POD.frontX)).toBeGreaterThan(POD.bottom + 0.5);
+    expect(podBottom(SIDE_POD.rearX)).toBeGreaterThan(POD.bottom + 0.5);
+    for (let x = SIDE_POD.rearX; x <= SIDE_POD.frontX; x += 0.05) {
+      for (const ax of [XF, XR]) expect(Math.hypot(x - ax, podBottom(x) - R), `x = ${x.toFixed(2)}`).toBeGreaterThan(R + 0.3);
+      if (x > LEDGE_END) expect(podBottom(x)).toBeLessThan(POD.ledge - 0.2); // the ledge stays above the lower edge
+    }
+  });
+
+  it('runs the ledge out ahead of the WILD ROAD panel, whose lower edge rises in a straight diagonal behind it', () => {
+    const insetAt = (x: number) => interpStations(POD_ST, x)[3];
+    expect(insetAt(LEDGE_END)).toBe(0);
+    expect(insetAt(LEDGE_END + 0.5)).toBeGreaterThan(0.2);
+    // photo 12: from about (-1.9, 3.7) up to (-4.7, 5.7), following the rear tyre
+    expect(podBottom(POD.cutX)).toBeCloseTo(POD.bottom, 6);
+    expect(podBottom(SIDE_POD.rearX)).toBeGreaterThan(5.4);
+    const mid = (POD.cutX + SIDE_POD.rearX) / 2;
+    expect(podBottom(mid)).toBeCloseTo((podBottom(POD.cutX) + podBottom(SIDE_POD.rearX)) / 2, 6); // straight, not an arch
   });
 });

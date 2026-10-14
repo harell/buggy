@@ -127,29 +127,54 @@ function lug(a: number, r0: number, r1: number, t: number, z0: number, z1: numbe
   return g;
 }
 /**
- * Mud-terrain tyre: a rounded carcass, two staggered shoulder rows of hooked lugs that wrap onto the sidewall,
- * small interlocking centre blocks and a plain sidewall down to the bead. Non-directional, so one geometry
- * serves both sides of the car.
+ * One shoulder lug as a slab `t` thick (tangentially): its cross-section (axial z, radius) runs along the crowned tread
+ * from z0, round the rounded shoulder and down the sidewall face to rStop, where it ends. `s` picks the side. It tapers
+ * to `taper` of its width toward its sidewall end and is skewed by `yaw` across the tread about its middle, so the rows
+ * look moulded rather than stacked.
  */
-export function tyreGeo(r: number, w: number, { lugs = TYRE_LUGS, bead = r * 0.55, depth = 0.27 } = {}): THREE.BufferGeometry {
-  const rc = r - depth, hw = w / 2, st = TAU / lugs;
+function shoulderLug(a: number, t: number, s: 1 | -1, z0: number, rStop: number, top: (z: number) => number, hw: number, sh: number, rIn: number, yaw = 0, taper = 1): THREE.BufferGeometry {
+  const zc = hw - sh, rc = top(zc) - sh, pts: P2[] = [[z0, rIn], [z0, top(z0)]];
+  for (let i = 0; i <= 4; i++) { const u = (i / 4) * (Math.PI / 2); pts.push([zc + sh * Math.sin(u), rc + sh * Math.cos(u)]); }
+  pts.push([hw, rStop], [hw - 0.24, rStop], [hw - 0.24, rIn - 0.2]);
+  const g = new THREE.ExtrudeGeometry(shapeOf(pts.map(([z, r]): P2 => [s * z, r])), { depth: t, bevelEnabled: false });
+  g.deleteAttribute('uv');
+  // shape (z, r) extruded along e  →  wheel (radial, tangential, axial)
+  g.applyMatrix4(new THREE.Matrix4().set(0, 1, 0, 0, 0, 0, 1, -t / 2, 1, 0, 0, 0, 0, 0, 0, 1));
+  const p = g.getAttribute('position'), zm = (s * (z0 + hw)) / 2, k = Math.tan(yaw);
+  for (let i = 0; i < p.count; i++) { // taper, then skew across the tread (a shear, so the sidewall face stays at hw)
+    p.setY(i, p.getY(i) * lerp(1, taper, Math.max(0, Math.min(1, (rc - p.getX(i)) / (rc - rStop)))) + (p.getZ(i) - zm) * k);
+  }
+  return g.rotateZ(a);
+}
+/**
+ * Mud-terrain tyre: a rounded carcass, two staggered shoulder rows of chunky hooked lugs that run over the slightly
+ * crowned tread, wrap round the rounded shoulders onto the sidewall and stop there (alternately short and long, in
+ * three widths, tapering and turned a little either way), small interlocking centre blocks, and plain rubber below.
+ * Non-directional, so one geometry serves both sides. `crown` is how far the tread face drops from the centre line to
+ * the shoulder; `shoulder` is the rounding radius.
+ */
+export function tyreGeo(r: number, w: number, { lugs = TYRE_LUGS, bead = r * 0.55, depth = 0.27, crown = 0.04, shoulder = 0.44 } = {}): THREE.BufferGeometry {
+  const rc = r - depth, hw = w / 2, st = TAU / lugs, top = (z: number) => r - crown * (z / hw) ** 2, widths = [0.5, 0.62, 0.7];
   const prof: P2[] = [[bead, -hw + 0.18], [bead + 0.35, -hw + 0.08], [rc - 0.45, -hw + 0.1], [rc - 0.1, -hw + 0.2], [rc, -hw + 0.45], [rc + 0.02, 0],
     [rc, hw - 0.45], [rc - 0.1, hw - 0.2], [rc - 0.45, hw - 0.1], [bead + 0.35, hw - 0.08], [bead, hw - 0.18]];
-  const carcass = new THREE.LatheGeometry(prof.map(([a, b]) => new THREE.Vector2(a, b)), 60).rotateX(Math.PI / 2);
+  const carcass = new THREE.LatheGeometry(prof.map(([a, b]) => new THREE.Vector2(a, b)), 48).rotateX(Math.PI / 2);
   carcass.deleteAttribute('uv');
   const parts: THREE.BufferGeometry[] = [carcass];
-  for (let k = 0; k < lugs; k++) for (const s of [1, -1]) {
-    const a = (k + (s > 0 ? 0 : 0.5)) * st, z = (z0: number, z1: number): [number, number] => (s > 0 ? [z0, z1] : [-z1, -z0]);
-    parts.push(lug(a, rc - 0.04, r, st * r * 0.62, ...z(0.36, hw - 0.12))); // shoulder lug
-    parts.push(lug(a + s * st * 0.42, rc - 0.04, r - 0.03, st * r * 0.3, ...z(0.36, 0.62))); // its hook, making the C-notch
-    parts.push(lug(a, rc - 0.5, rc - 0.02, st * r * 0.55, ...z(hw - 0.16, hw))); // wraps onto the sidewall
+  for (let k = 0; k < lugs; k++) for (const s of [1, -1] as const) {
+    const a = (k + (s > 0 ? 0 : 0.5)) * st, odd = k % 2 === 1, dz = (k % 3 === 1 ? 0.06 : -0.06) * s;
+    const z = (z0: number, z1: number): [number, number] => (s > 0 ? [z0 + dz, z1 + dz] : [-z1 + dz, -z0 + dz]);
+    parts.push(shoulderLug(a, st * r * widths[k % 3], s, odd ? 0.44 : 0.34, r - (odd ? 0.62 : 0.82), top, hw, shoulder, rc - 0.04, odd ? 0.21 : -0.21, 0.7)); // wraps onto the sidewall
+    parts.push(lug(a + s * st * (odd ? 0.4 : 0.44), rc - 0.04, r - 0.03, st * r * 0.3, ...z(odd ? 0.44 : 0.34, odd ? 0.68 : 0.6))); // its hook, making the C-notch
     const zc = (k % 2 ? 1 : -1) * 0.12 * s;
     if (s > 0) parts.push(lug(a + st * 0.25, rc - 0.04, r - 0.04, st * r * 0.42, zc - 0.17, zc + 0.17)); // centre blocks
   }
-  return mergeGeometries(parts)!;
+  return mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)))!;
 }
 
-/** Rim face: 5 spokes that each fork into a Y near the lip (5 big openings and a small gap in each Y). */
+/**
+ * Rim face: 5 broad spokes that each fork into a Y near the lip (5 openings, about half the face, and a small gap in
+ * each Y).
+ */
 export function rimShape(rLip: number, spokes = RIM_SPOKES): THREE.Shape {
   const s = new THREE.Shape(); s.absarc(0, 0, rLip, 0, TAU, false);
   const at = (r: number, a: number): P2 => [r * Math.cos(a), r * Math.sin(a)], d = Math.PI / 180, step = TAU / spokes;
@@ -157,9 +182,9 @@ export function rimShape(rLip: number, spokes = RIM_SPOKES): THREE.Shape {
   for (let k = 0; k < spokes; k++) {
     const a = k * step, open: P2[] = [];
     for (let i = 0; i <= 6; i++) open.push(at(r2, a + 24 * d + (i / 6) * (step - 48 * d)));
-    open.push(at(r1, a + step - 10 * d));
-    for (let i = 0; i <= 4; i++) open.push(at(r0, a + step - 13 * d - (i / 4) * (step - 26 * d)));
-    open.push(at(r1, a + 10 * d));
+    open.push(at(r1, a + step - 18 * d));
+    for (let i = 0; i <= 4; i++) open.push(at(r0, a + step - 22 * d - (i / 4) * (step - 44 * d)));
+    open.push(at(r1, a + 18 * d));
     s.holes.push(shapeOf(open));
     s.holes.push(shapeOf([at(r1 - 0.05 * rLip, a), at(r2, a - 11 * d), at(r2, a + 11 * d)])); // the gap inside the Y
   }
@@ -184,8 +209,10 @@ export function ringGeo(rOut: number, rIn = rOut * 0.79, thick = 0.12, bolts = R
 /*
  * Sheet-metal panels. A station is an open polyline (z, y) of the panel's outer face at one x. The skin is
  * thickened toward the right-hand side of the polyline (draw it left to right over the top, so that is inward).
+ * `capStart` / `capEnd` close the first / last station with a flat face, its outline closed by the chord between
+ * the polyline's ends (a pod's front, the hood's nose).
  */
-export function panelGeo(stations: Station[], t: number): THREE.BufferGeometry {
+export function panelGeo(stations: Station[], t: number, { capStart = false, capEnd = false } = {}): THREE.BufferGeometry {
   const n = stations[0].pts.length, m = stations.length, pos: number[] = [], idx: number[] = [];
   const inner = stations.map((st) => st.pts.map(([z, y], j): P2 => {
     let nz = 0, ny = 0;
@@ -223,6 +250,15 @@ export function panelGeo(stations: Station[], t: number): THREE.BufferGeometry {
     const x = Array(n).fill(stations[i].x);
     strip(stations[i].pts, inner[i], x, x, rev === flip);
   }
+  for (const [i, on] of [[0, capStart], [m - 1, capEnd]] as const) {
+    if (!on) continue;
+    const ring = stations[i].pts.filter((p, j, a) => j === 0 || Math.hypot(p[0] - a[j - 1][0], p[1] - a[j - 1][1]) > 1e-6);
+    const base = pos.length / 3, faces = THREE.ShapeUtils.triangulateShape(ring.map(([z, y]) => new THREE.Vector2(z, y)), []);
+    ring.forEach((p) => vert(stations[i].x, p));
+    // face away from the panel: +x at its front end, -x at its rear (the (z, y) → (x, y, z) swap mirrors the winding)
+    const out = (stations[i].x >= stations[m - 1 - i].x) !== THREE.ShapeUtils.isClockWise(ring.map(([z, y]) => new THREE.Vector2(z, y)));
+    for (const [a, b, c] of faces) if (out) idx.push(base + a, base + b, base + c); else idx.push(base + a, base + c, base + b);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx);
@@ -250,6 +286,15 @@ export function springPoints(turns: number, closed = 0): THREE.Vector3[] {
 export function springGeo(outer = 0.4, turns = 7, wire = 0.06, closed = 0, len = 1): THREE.TubeGeometry {
   const r = outer - wire, pts = springPoints(turns, closed).map((p) => V(p.x * r, p.y * len, p.z * r));
   return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), turns * 16, wire, 6);
+}
+
+/**
+ * How strongly a lamp's glow shows to a viewer: full head-on, fading out by about 70° off its forward axis, and none
+ * from the side or behind. Neither vector needs to be unit length.
+ */
+export function facingGlow(forward: THREE.Vector3, toViewer: THREE.Vector3): number {
+  const c = forward.dot(toViewer) / (forward.length() * toViewer.length() || 1), t = Math.max(0, Math.min(1, (c - 0.3) / (0.97 - 0.3)));
+  return t * t * (3 - 2 * t);
 }
 
 /** Point an object built along +y (unit length) from a to b, stretching it to fit. */

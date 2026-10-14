@@ -6,7 +6,7 @@ export class RideGraph {
   constructor(private box: HTMLElement, private canvas: HTMLCanvasElement, private feel: HTMLElement) {}
 
   draw(meter: RideMeter, show: boolean): void {
-    if (show !== this.shown) { this.box.hidden = !show; this.shown = show; }
+    if (show !== this.shown) { this.box.hidden = !show; this.box.parentElement?.classList.toggle('ride-on', show); this.shown = show; }
     if (!show) return;
     const dpr = Math.min(devicePixelRatio, 2), W = this.canvas.clientWidth, H = this.canvas.clientHeight;
     if (this.canvas.width !== Math.round(W * dpr)) { this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr); }

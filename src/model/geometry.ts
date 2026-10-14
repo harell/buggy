@@ -172,21 +172,22 @@ export function tyreGeo(r: number, w: number, { lugs = TYRE_LUGS, bead = r * 0.5
 }
 
 /**
- * Rim face: 5 broad spokes that each fork into a Y near the lip (5 openings, about half the face, and a small gap in
- * each Y).
+ * Rim face (photos 12, 28): 5 broad straight-sided arms from a small solid hub, each flaring into a short Y at the
+ * lip, so the 5 big openings between them dominate (about half the face); a small notch splits each Y.
  */
 export function rimShape(rLip: number, spokes = RIM_SPOKES): THREE.Shape {
   const s = new THREE.Shape(); s.absarc(0, 0, rLip, 0, TAU, false);
   const at = (r: number, a: number): P2 => [r * Math.cos(a), r * Math.sin(a)], d = Math.PI / 180, step = TAU / spokes;
-  const r0 = 0.4 * rLip, r1 = 0.72 * rLip, r2 = 0.9 * rLip;
+  const r0 = 0.4 * rLip, rY = 0.7 * rLip, r2 = 0.9 * rLip, half = 0.16 * rLip; // hub, where the Y starts, lip, arm half-width
+  const edge = (r: number) => Math.asin(half / r); // a straight arm edge's angle off its centre line at radius r
   for (let k = 0; k < spokes; k++) {
-    const a = k * step, open: P2[] = [];
-    for (let i = 0; i <= 6; i++) open.push(at(r2, a + 24 * d + (i / 6) * (step - 48 * d)));
-    open.push(at(r1, a + step - 18 * d));
-    for (let i = 0; i <= 4; i++) open.push(at(r0, a + step - 22 * d - (i / 4) * (step - 44 * d)));
-    open.push(at(r1, a + 18 * d));
+    const a = k * step, b = a + step, open: P2[] = [];
+    for (let i = 0; i <= 3; i++) { const r = lerp(r0, rY, i / 3); open.push(at(r, a + edge(r))); } // up one arm's edge
+    for (let i = 0; i <= 6; i++) open.push(at(r2, a + 19 * d + (i / 6) * (step - 38 * d))); // along the lip, between the Y tips
+    for (let i = 3; i >= 0; i--) { const r = lerp(r0, rY, i / 3); open.push(at(r, b - edge(r))); } // down the next arm
+    for (let i = 1; i < 4; i++) open.push(at(r0, b - edge(r0) - (i / 4) * (step - 2 * edge(r0)))); // round the hub
     s.holes.push(shapeOf(open));
-    s.holes.push(shapeOf([at(r1 - 0.05 * rLip, a), at(r2, a - 11 * d), at(r2, a + 11 * d)])); // the gap inside the Y
+    s.holes.push(shapeOf([at(rY + 0.08 * rLip, a), at(r2, a - 5 * d), at(r2, a + 5 * d)])); // the small notch inside the Y
   }
   const axle = new THREE.Path(); axle.absarc(0, 0, 0.1 * rLip, 0, TAU, true); s.holes.push(axle);
   return s;

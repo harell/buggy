@@ -13,7 +13,8 @@ export interface MeshMeta {
   op0: number;
   tr0: boolean;
   dw0: boolean;
-  cutaway?: PartKey;
+  /** The parts whose picking turns this cover see-through. */
+  cutaway?: readonly PartKey[];
   isLed?: boolean;
 }
 export type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.Material> & { userData: MeshMeta };
@@ -36,7 +37,6 @@ export const MAT = {
   nylon: std({ color: 0xf1ebdc, roughness: 0.5 }),
   nylonDark: std({ color: 0x8f97a3, roughness: 0.45 }),
   bell: std({ color: 0xece6d6, roughness: 0.55 }),
-  smoke: std({ color: 0x56606e, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.26, depthWrite: false }),
   chip: std({ color: 0x15161a, roughness: 0.4 }),
   white: std({ color: 0xf4f4f2, roughness: 0.4 }),
   redWire: std({ color: 0xd3322b, roughness: 0.45 }),
@@ -47,18 +47,32 @@ export const MAT = {
 
 /** Shared see-through material for everything except the part being looked at. */
 export const GHOST = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.055, depthWrite: false });
+/** A stronger ghost for the parts the wires end at while Wires is picked, so every wire visibly lands somewhere. */
+export const GHOST_NEAR = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.25, depthWrite: false });
+const wireEnds = new WeakSet<THREE.Object3D>();
 
-export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey; led?: boolean }
+/** Meshes that never cast a shadow: made with cast: false, or too small for theirs to show. */
+const noShadow = new WeakSet<THREE.Object3D>();
+/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or a part is picked. */
+const shutIn = new WeakSet<THREE.Object3D>();
+let apart = false, lit: PartKey | null = null;
+/** A cover opened up for the picked part: see-through, so it casts no shadow onto what it shows. */
+const cutOpen = (m: PartMesh) => lit !== null && !!m.userData.cutaway?.includes(lit);
+// with a part picked, everything else is ghosted and its own covers are open, so what is shut inside shows
+const casts = (m: PartMesh) => (!lit || m.userData.part === lit) && !noShadow.has(m) && !cutOpen(m) && (apart || lit !== null || !shutIn.has(m));
+
+export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean }
 
 /** Make a mesh that belongs to a part. Each mesh gets its own material so it can glow on its own. */
 export function mk(geo: THREE.BufferGeometry, src: MatSource, part: PartKey, o: MkOpts = {}): PartMesh {
   const mat = typeof src === 'function' ? src() : src;
   const m = new THREE.Mesh(geo, mat) as unknown as PartMesh;
   m.castShadow = o.cast ?? true;
+  if (!m.castShadow) noShadow.add(m);
   m.receiveShadow = o.receive ?? true;
   m.userData = {
     part, mat, em0: mat.emissive.clone(), emI0: mat.emissiveIntensity, op0: mat.opacity, tr0: mat.transparent, dw0: mat.depthWrite,
-    cutaway: o.cutaway, isLed: o.led,
+    cutaway: o.cutaway === undefined ? undefined : ([] as PartKey[]).concat(o.cutaway), isLed: o.led,
   };
   PARTS[part].meshes.push(m);
   allMeshes.push(m);
@@ -82,12 +96,13 @@ export const exOf = (o: Piece, e: number): THREE.Vector3 => o.userData.ex.clone(
 
 /** Show one part (or everything when null): ghost the rest, open its cutaways, reset glows. */
 export function applyHighlight(k: PartKey | null): void {
+  lit = k;
   for (const p of Object.values(PARTS)) for (const m of p.meshes) {
     const meta = m.userData, base = meta.mat, on = !k || p.key === k;
-    m.material = on ? base : GHOST;
-    m.castShadow = on;
+    m.material = on ? base : k === 'wires' && wireEnds.has(m) ? GHOST_NEAR : GHOST;
+    m.castShadow = casts(m);
     if (meta.cutaway) {
-      const cut = k === meta.cutaway;
+      const cut = cutOpen(m);
       base.transparent = cut || meta.tr0;
       base.opacity = cut ? 0.2 : meta.op0;
       base.depthWrite = cut ? false : meta.dw0;
@@ -95,6 +110,33 @@ export function applyHighlight(k: PartKey | null): void {
     }
     if (!meta.isLed) { base.emissive.copy(meta.em0); base.emissiveIntensity = meta.emI0; }
   }
+}
+
+/**
+ * Stop meshes casting shadows nobody would see (call once the car is built): any whose world bounding radius is
+ * under `minRadius`, and the ones under `inside` (the gearbox, the motor can, the electronics tub) other than the
+ * covers, whose shadow shows only while the car is apart or a part is picked.
+ */
+export function quietShadows(minRadius: number, inside: readonly THREE.Object3D[]): void {
+  for (const m of allMeshes) {
+    m.updateWorldMatrix(true, false);
+    if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+    if (m.geometry.boundingSphere!.radius * m.matrixWorld.getMaxScaleOnAxis() < minRadius) noShadow.add(m);
+  }
+  for (const o of inside) o.traverse((m) => { if ((m as PartMesh).isMesh && !(m as PartMesh).userData.cutaway) shutIn.add(m); });
+  for (const m of allMeshes) m.castShadow = casts(m);
+}
+
+/** Tell the shadows whether the car is taken apart, which lets the parts shut inside it cast again. */
+export function setApart(a: boolean): void {
+  if (a === apart) return;
+  apart = a;
+  for (const m of allMeshes) if (shutIn.has(m)) m.castShadow = casts(m);
+}
+
+/** The objects the wires end at (battery, board, motors, light bar): ghosted lightly while Wires is picked. */
+export function markWireEnds(objs: readonly THREE.Object3D[]): void {
+  for (const o of objs) o.traverse((m) => { if ((m as PartMesh).isMesh) wireEnds.add(m); });
 }
 
 const GLOW = new THREE.Color(0xff7a12);

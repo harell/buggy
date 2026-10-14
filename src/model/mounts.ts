@@ -3,7 +3,7 @@
  * for its textures, so the tests can check how the parts fit together.
  */
 import * as THREE from 'three';
-import { HOOD, R, ROOF, SIDE_POD, XF } from '../core/dims';
+import { HOOD, R, ROOF, SIDE_POD, WING, XF } from '../core/dims';
 import { AXLE, DRIVE_TEETH, G1, MODULE, MOTOR, pitchRadius, STEER_ARM } from '../core/gears';
 import { lerp } from '../core/math';
 import { interpStations, V, type P2 } from './geometry';
@@ -27,6 +27,38 @@ export const GEAR_Z = { pinion: MOTOR_Z - 0.25, final: MOTOR_Z - 0.6 } as const;
 const ARM = Math.hypot(AXLE.x - PIVOT.x, AXLE.y - PIVOT.y);
 /** How far the rear unit turns about PIVOT (about z) to put the axle centre at height y; the axle moves in x as it swings. */
 export const swingFor = (y: number): number => Math.asin((AXLE.y - PIVOT.y) / ARM) - Math.asin(Math.max(-1, Math.min(1, (y - PIVOT.y) / ARM)));
+
+/* ---- Rear wing (photos 14, 22, 23, 30) ---- */
+/** The deck tilts down toward the front by this much (radians), so WILD ROAD on it faces forward. */
+export const WING_TILT = (11 * Math.PI) / 180;
+/** Height of the deck's top face at x. */
+export const WING_DECK = (x: number): number => WING.trailY - (x - WING.trailX) * Math.tan(WING_TILT);
+/**
+ * Each endplate's side outline (x, y): a paddle of fairly even width nearly the full chord long, tilted nose-down with
+ * the deck (photos 12, 21, 22). Its rounded top-rear corner is the highest point; it is deepest under the front half.
+ */
+export const WING_ENDPLATE: readonly P2[] = (() => {
+  const t = WING.trailX, lead = t + WING.chord, D = WING_DECK, top = WING.top;
+  return [[t, D(t) - 0.2], [t + 0.3, top], [t + 1.0, top - 0.1], [lead, D(lead) + 0.3], [lead - 0.1, D(lead) - 0.3], [t + 2.1, D(t) - 0.97], [t + 0.6, D(t) - 0.15]];
+})();
+/** The raised centre section on the deck: how high it stands and its half-width at the trailing edge. */
+export const WING_CENTRE = { lift: 0.12, halfW: 2.8 } as const;
+/** Top of the gearbox housing's side outline at x. */
+const gearboxTop = (x: number): number => {
+  let top = -Infinity;
+  for (let i = 0, j = GEARBOX_OUTLINE.length - 1; i < GEARBOX_OUTLINE.length; j = i++) {
+    const [ax, ay] = GEARBOX_OUTLINE[j], [bx, by] = GEARBOX_OUTLINE[i];
+    if ((ax - x) * (bx - x) <= 0 && ax !== bx) top = Math.max(top, lerp(ay, by, (x - ax) / (bx - ax)));
+  }
+  return top;
+};
+/**
+ * The short lattice under the wing's centre (photo 30): 4 square struts at x (front, rear) and ±z, standing on the
+ * gearbox's top, with rungs round them at two heights.
+ */
+export const WING_LATTICE = { x: [-9.1, -9.75] as const, z: 0.85, foot: gearboxTop, rungs: [6.1, 7.2] as const } as const;
+/** The rear guard's two wrap rails (y), and where each ends behind the tyre (x); both sit at or above the tyre top. */
+export const GUARD = { rails: [5.3, 6.7] as const, endX: [-9.95, -9.55] as const } as const;
 
 /* ---- Front corners and steering ---- */
 /** Steering rack, in the nose block just behind the front axle. */
@@ -74,17 +106,20 @@ export const surfHood = (x: number, z: number): number => {
 };
 /**
  * Side pods: a horizontal ledge along the middle, the lower edge cut back in an arch round the front tyre (`archF` from
- * the axle centre) and, behind the point where the ledge runs out (`cutX`), rising in a straight diagonal to `cutTop`
- * at the rear, following the rear tyre (photos 12, 21, 22). So the panel is a long, low shape between the wheels and
- * its WILD ROAD section a tapered wedge.
+ * the axle centre) and, from under the WILD ROAD frame's rear end (`cutX`), rising in a straight diagonal to `cutTop`
+ * at the rear, following the rear tyre (photos 12, 21, 22). So the panel is a long, low shape between the wheels, the
+ * diagonal only chamfering the frame's lower rear corner.
  */
-export const POD = { ledge: 5.55, bottom: 3.5, archF: 3.65, cutX: -2.0, cutTop: 5.6 } as const;
+export const POD = { ledge: 5.55, bottom: 3.5, archF: 3.65, cutX: -3.1, cutTop: 5.6 } as const;
 /** Where the ledge has run out: behind it the pod is one flat panel (it carries WILD ROAD). */
 export const LEDGE_END = -2.05;
 const arch = (x: number, ax: number, r: number) => (Math.abs(x - ax) < r ? R + Math.sqrt(r * r - (x - ax) ** 2) : -Infinity);
 /** Height of a pod's lower edge at x. */
 export const podBottom = (x: number): number =>
   Math.max(POD.bottom, arch(x, XF, POD.archF), lerp(POD.bottom, POD.cutTop, Math.max(0, Math.min(1, (POD.cutX - x) / (POD.cutX - SIDE_POD.rearX)))));
+/** The WILD ROAD frame on each pod's flat rear panel: front and rear x, top; its lower edge keeps clear of the pod's cut. */
+export const wildBottom = (x: number): number => podBottom(x) + 0.32;
+export const WILD = { x0: -2.15, x1: -3.55, top: 6.6, y0: wildBottom(-2.15) } as const; // its top just under the pod's top edge
 /**
  * Pod stations, front to rear: [x, outer half-width, top, how far the upper face steps in above the ledge]. The top
  * sweeps up from about hood height just behind the front tyre to the B-pillar; the ledge runs out just behind the
@@ -92,19 +127,30 @@ export const podBottom = (x: number): number =>
  */
 export const POD_ST: readonly (readonly [number, number, number, number])[] = [
   [SIDE_POD.frontX, SIDE_POD.wCockpit / 2 - 0.08, 6.3, 0.45], [2.5, SIDE_POD.wCockpit / 2 - 0.03, 6.45, 0.45], [1.0, SIDE_POD.wCockpit / 2, 6.6, 0.45],
-  [0, SIDE_POD.wCockpit / 2, SIDE_POD.top, 0.45], [-1.0, 4.0, 6.8, 0.42], [-1.75, 4.08, 6.93, 0.33], [LEDGE_END, 4.12, 7.0, 0], [SIDE_POD.wMaxX, SIDE_POD.wMax / 2, 7.3, 0],
-  [-4.0, 4.15, 7.6, 0], [SIDE_POD.rearX, 4.0, SIDE_POD.rearTop, 0]];
+  [0, SIDE_POD.wCockpit / 2, SIDE_POD.top, 0.45], [-1.0, 4.0, 6.75, 0.42], [-1.75, 4.08, 6.8, 0.33], [LEDGE_END, 4.12, 6.82, 0], [SIDE_POD.wMaxX, SIDE_POD.wMax / 2, 6.87, 0],
+  [-4.0, 4.15, 6.91, 0], [SIDE_POD.rearX, 4.0, SIDE_POD.rearTop, 0]];
 /* ---- Body frame ---- */
 const FP = { z: 2.45, x0: HOOD.rearX + 0.1, x1: HOOD.rearX + 1.15 } as const, FP_Y = surfHood(FP.x0 + 0.4, FP.z);
-/** B-pillar each side: from the roof's rear corner, bowed back behind the rear panel's holes, down to the pod. */
-export const B_PILLAR = (s: number): [number, number, number][] => [[ROOF.rearX + 0.12, ROOF.top - 0.2, s * (ROOF.w / 2 - 0.15)], [ROOF.rearX - 1.05, 8.3, s * 2.2],
-  [SIDE_POD.rearX + 0.15, SIDE_POD.rearTop - 0.4, s * 3.0]];
-/** Flat perforated infill plates (outline in x, y, at |z| = z). The rear one runs from the hoop leg back to the B-pillar. */
+/**
+ * B-pillar each side: from the roof's rear corner down and back to the end of the rear shock crossbar, along the top
+ * edge of the rear infill (photos 12, 22).
+ */
+export const B_PILLAR = (s: number): [number, number, number][] => [[ROOF.rearX + 0.12, ROOF.top - 0.2, s * (ROOF.w / 2 - 0.15)],
+  [lerp(ROOF.rearX, REAR_SHOCK_TOP(s).x, 0.45), 8.5, s * 2.2], [REAR_SHOCK_TOP(s).x + 0.35, REAR_SHOCK_TOP(s).y + 0.42, s * 2.25]];
+/** Flat perforated infill plates (outline in x, y, at |z| = z). */
 export interface Perforated { outline: P2[]; holes: P2[]; hr: number; z: number }
+/**
+ * The black rear infill each side closes the triangle behind the cockpit (issue #10, photos 12 and 22): from the roof's
+ * rear edge, down and back under the B-pillar to the shock crossbar, down to the tub's rear wall behind the pod, and
+ * forward over the electronics lid to the rear hoop's leg. Its upper part, above the pod, carries the 6 holes in two staggered rows. It sits
+ * inboard of the rear shocks.
+ */
+const REAR_INFILL_FOOT = 5.92; // just above the electronics lid, so the plate stands clear of it
 export const REAR_PANEL: Perforated = {
-  outline: [[ROOF.rearX + 0.1, ROOF.top - 0.25], [ROOF.rearX + 0.1, 7.4], [SIDE_POD.rearX + 0.25, 7.55], [SIDE_POD.rearX + 0.2, 7.65], [ROOF.rearX - 1.1, 8.25], [ROOF.rearX - 0.75, 8.68], [ROOF.rearX - 0.2, ROOF.top - 0.25]],
-  holes: [[-3.5, 8.3], [-3.8, 8.3], [-4.1, 8.3], [-3.6, 7.92], [-3.9, 7.92], [-4.2, 7.92]],
-  hr: 0.1, z: 2.15,
+  outline: [[ROOF.rearX + 0.1, ROOF.top - 0.25], [ROOF.rearX + 0.1, REAR_INFILL_FOOT], [TUB.x0 + 0.1, REAR_INFILL_FOOT],
+    [REAR_SHOCK_TOP(1).x + 0.3, REAR_SHOCK_TOP(1).y + 0.3], [ROOF.rearX - 0.6, ROOF.top - 0.38]],
+  holes: [[-4.0, 8.28], [-4.36, 8.28], [-4.72, 8.28], [-4.18, 7.86], [-4.54, 7.86], [-4.9, 7.86]],
+  hr: 0.14, z: 2.12,
 };
 /** The small front plate stands on the hood's sloping facet beside each A-pillar base. */
 export const FRONT_PANEL: Perforated = {

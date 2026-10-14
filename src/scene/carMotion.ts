@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { PartKey } from '../core/catalog';
+import { wiresShown } from '../core/pick';
 import { CORNERS, R, TZ, TZR, XR } from '../core/dims';
 import { driveAngles, rackTravel, steerGearAngles } from '../core/gears';
 import type { Body, CornerBumps } from '../core/suspension';
@@ -99,7 +100,7 @@ export function poseCar(car: Car, k: PoseInput): void {
   // wires: a glow travels along each wire carrying current
   const steerAct = Math.min(1, Math.abs(drive.steerVel) * 2), power = Math.abs(drive.throttle);
   for (const w of car.wires) {
-    w.mesh.visible = k.explodeRaw < 0.25;
+    w.mesh.visible = wiresShown(k.explodeRaw);
     let level = 0, speed = 0;
     if (w.circuit === 'batt') { level = Math.min(1, power + steerAct * 0.6 + (k.lights ? 0.15 : 0)); speed = level * w.dir; }
     else if (w.circuit === 'drive') { level = power; speed = Math.sign(drive.throttle) * power * w.dir; }

@@ -78,9 +78,22 @@ describe('body (measured)', () => {
     within(HOOD.tipX - SIDE_POD.rearX, 149, 6); // painted body length
   });
 
+  it('keeps the pod top nearly level, so the black vent plate shows above it at the rear (photos 12, 22)', () => {
+    within(SIDE_POD.top, 67, 3);
+    within(SIDE_POD.rearTop, 69, 3); // the 78 mm once read here was the black upper body above the panel
+    expect(SIDE_POD.rearTop - SIDE_POD.top).toBeGreaterThanOrEqual(0);
+    expect(SIDE_POD.rearTop - SIDE_POD.top).toBeLessThan(0.5);
+  });
+
   it('keeps the pods clear of the tyres', () => {
     expect(SIDE_POD.wMax / 2).toBeLessThan(TZR - TYRE_W / 2 - 0.2);
     expect(HOOD.wAtFrontAxle / 2).toBeLessThan(TZF - TYRE_W / 2 - 0.2);
+  });
+
+  it('has a roof plate about 51 mm long, a third of the wheelbase or more (photos 12, 22)', () => {
+    within(ROOF.frontX - ROOF.rearX, 51, 3);
+    expect((ROOF.frontX - ROOF.rearX) / WB).toBeGreaterThanOrEqual(0.33);
+    expect((ROOF.frontX - ROOF.rearX) / WB).toBeLessThanOrEqual(0.37);
   });
 
   it('has the roof 92 mm up, just below the wing endplates', () => {

@@ -4,13 +4,13 @@ An interactive 3D model of a toy RC buggy, made to show a young child how the ca
 
 **Live site:** https://harell.github.io/buggy/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
 
-The car is a generic blue "SHUTTLE 08 / WILD ROAD" 1:16 off-road buggy: 2WD, 2.4 GHz radio, a 3.7 V rechargeable battery and an alloy body shell.
+The car is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), shown in blue with its "SHUTTLE 08" and "WILD ROAD" decals. It has rear-wheel drive, a 2.4 GHz radio with on/off throttle and steering, one 3.7 V 14500 lithium-ion cell, and painted metal panels on a black plastic frame.
 
 ## What you can do
 
 | Area | How it works |
 | --- | --- |
-| Remote (left) | Fixed view. Drag its wheel to steer and hold its trigger to drive. The Forward / Back / Left / Right buttons and the arrow keys (or WASD) do the same. **Keep going** drives forward without holding. |
+| Remote (left) | Fixed view. Drag its wheel to steer and hold its trigger to drive (push the trigger away to reverse). Its **+** button switches the lights, as on the real remote. The Forward / Back / Left / Right buttons and the arrow keys (or WASD) do the same. **Keep going** drives forward without holding. |
 | Car (right) | Drag to spin, scroll or pinch to zoom, right-drag to slide. The car stays in place while the dirt track moves under it. |
 | Take it apart | A button and a slider spread the parts out into an exploded view. Every part keeps moving while it is apart. |
 | Look closer | Engine, Gears, Battery, Brain, Steering, Springs, Wheels, Lights, Wires, Frame or Body. The rest of the car turns see-through, the part glows and the camera moves to it. A short explanation for children and a note for grown-ups appear underneath. You can also tap a part in 3D. |
@@ -41,8 +41,8 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 | Folder | What lives there | Tested |
 | --- | --- | --- |
 | `src/core/` | Pure logic: dimensions, terrain height field, controls, driving model, suspension, gear and rack kinematics, ride meter, label layout, signal-path strip, part catalogue | Yes, `tests/*.test.ts` |
-| `src/model/` | Procedural 3D model: geometry builders (tested), materials and part registry, canvas textures, the car | Geometry builders |
-| `src/scene/` | Three.js scene: renderer and camera, the moving ground, the remote, radio rings, posing the car each frame | Visually |
+| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry, canvas textures, the car | Geometry builders and mount points |
+| `src/scene/` | Three.js scene: renderer and camera, the moving ground, the remote, radio rings, posing the car each frame | The remote's builder (`tests/remote.test.ts`); the rest visually |
 | `src/ui/` | DOM pieces: labels, signal-path strip, ride graph, sound | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |
 
@@ -69,9 +69,11 @@ Recommended: in **Settings → Branches**, protect `main` so that it requires a 
 
 ## How accurate is the model?
 
-- **Outside:** shape, colours and proportions come from the seller's photos and size chart (24.5 × 14.5 × 9.5 cm). The car is modelled in code from simple shapes, so curves are approximate.
-- **Inside:** nobody publishes schematics for this toy. The layout follows a [published teardown of a near-identical 1:16 toy buggy](https://github.com/slackhappy/rccar). That buggy has a 2.4 GHz receiver chip, a MOSFET H-bridge for the drive motor, a separate driver chip for the steering motor, a rear motor with a gearbox, and coil-over shocks at each corner.
-- **Illustrative, not measured:** the gear ratio (8:28 then 10:30, about 10.5 : 1), the steering rack geometry and the exact part sizes.
-- **Checked and not used:** the Dikavey BX12, MJX 16208/16209/16210 and Traxxas 1/16–1/18 manuals. They describe hobby-grade 4WD cars with servos, speed controllers and differentials, not this toy.
+The model follows online research on the real DK087 (factory no. 3699-087). [`research/README.md`](research/README.md) has the findings and sources; nobody here has the car yet.
 
-A research brief lists the photos and measurements needed to make the model match the real car exactly.
+- **Sizes:** every size is a constant in `src/core/dims.ts`, measured from buyer photos and scaled from one photo of the car on a 1 cm cutting mat. [`research/measurements.csv`](research/measurements.csv) gives each value's source and uncertainty (mostly ±1–6 mm) and the constant that uses it. The car comes out at about 22.9 × 14.2 × 9.3 cm. The seller's 24.5 × 14.5 × 9.5 cm is not a measurement. Nothing has been checked with a caliper yet.
+- **Shape and parts:** taken from photos of real cars, not seller renders, and from a stock teardown video. That covers the 6 cm tyres and 5-spoke rims with a grey ring, the painted panels screwed to a moulded frame, the one lower arm per side at the front, the live rear axle with the motor lying across it, the battery bay and power switch under the car, the receiver board with its coil antenna, the 3-LED light bar and the remote.
+- **Still illustrative:** the gear tooth counts and ratio (8 → 28, then 10 → 30, about 10.5 : 1), since no photo shows the gears; the steering motor, gears and rack, since the steering box was never photographed; the receiver board's chips and layout; which wire goes where; spring stiffness and travel; and the exact curves, since the car is built in code from simple shapes.
+- **Checked and not used:** the first version of the model followed a [teardown of a similar 1:16 toy buggy](https://github.com/slackhappy/rccar). The DK087's own photos replace it. The Dikavey BX12, MJX 16208/16209/16210 and Traxxas 1/16–1/18 manuals describe hobby-grade 4WD cars with servos, speed controllers and differentials, not this toy.
+
+[What still needs the car](research/README.md#still-needs-the-car) lists what to measure when it arrives: gear tooth counts, the steering box, board chips, shock travel, steering lock and weight.

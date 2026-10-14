@@ -28,8 +28,11 @@ export const CORNERS: readonly { key: Corner; x: number; z: number; front: boole
 export const BUMPER = { faceX: XF + 4.15, plateW: 4.4, top: 5.4, bottom: 3.4, hoopW: 6.6 } as const;
 /** Single blue panel from the cockpit to the nose, narrowing between the front shocks. */
 export const HOOD = { tipX: XF + 2.87, wAtFrontAxle: 4.0, topAtFrontAxle: 5.65, rearX: 1.6 } as const;
-/** Blue side panels: 78 mm across the cockpit, widest (84.5 mm) about 42 mm ahead of the rear axle. */
-export const SIDE_POD = { frontX: 2.6, rearX: XF - 12.0, wCockpit: 7.8, wMax: 8.45, wMaxX: XR + 4.25, top: 6.7, rearTop: 7.8 } as const;
+/**
+ * Blue side panels: 78 mm across the cockpit, widest (84.5 mm) about 42 mm ahead of the rear axle. The front edge
+ * (just behind the front tyre) is read off side photos 12, 21 and 22, not measured.
+ */
+export const SIDE_POD = { frontX: 4.0, rearX: XF - 12.0, wCockpit: 7.8, wMax: 8.45, wMaxX: XR + 4.25, top: 6.7, rearTop: 7.8 } as const;
 /** Blue roof plate on the frame, with a U-notch at the front for the light bar. */
 export const ROOF = { top: 9.2, w: 4.2, frontX: 1.3, rearX: -3.3 } as const;
 /** Three white LEDs in a black bar under the roof's front edge. */

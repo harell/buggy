@@ -49,6 +49,9 @@ const ride = new RideMeter();
 const sound = new MotorSound();
 const ui = { lights: true, slow: false, slowManual: false, locked: false, explodeT: 0, explode: 0, timeScale: 1, selected: null as PartKey | null, ringClock: 0 };
 
+// Dev server only (stripped from production builds): lets scripted screenshots set the camera and state.
+if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, input, drive } });
+
 /* ---------------- selection & camera ---------------- */
 let camTween: { t: number; dur: number; fT: THREE.Vector3; tT: THREE.Vector3; fP: THREE.Vector3; tP: THREE.Vector3 } | null = null;
 orbit.addEventListener('start', () => { camTween = null; });

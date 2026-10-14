@@ -47,9 +47,17 @@ describe('Controls', () => {
   it('uses the dragged remote wheel over the buttons', () => {
     c.press('left', 'btn');
     c.wheelDrag = -0.4;
-    expect(c.steerTarget()).toBe(-0.4);
+    expect(c.steerTarget()).toBe(-1);
     c.wheelDrag = null;
     expect(c.steerTarget()).toBe(1);
+  });
+
+  it('steers full left, straight or full right only, like the real remote', () => {
+    // the DK087 remote has on/off switches behind its wheel, not a proportional sensor
+    for (const [drag, want] of [[0, 0], [0.15, 0], [-0.15, 0], [0.3, 1], [0.9, 1], [-0.5, -1], [-1, -1]] as const) {
+      c.wheelDrag = drag;
+      expect(c.steerTarget()).toBe(want);
+    }
   });
 
   it('clears every hold, e.g. when the window loses focus', () => {

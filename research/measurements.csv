@@ -14,8 +14,9 @@ Shell width at the front axle,Widest point,76,40,6,low,"Only the narrow hood is 
 Shell width at the cockpit,Widest point,80,78,4,low,Side-pod span in the A4 top view,,"Widest point 84.5 +/- 4, about 35-50 mm ahead of the rear axle",src/core/dims.ts SIDE_POD.wCockpit (widest: SIDE_POD.wMax at SIDE_POD.wMaxX)
 Shell width at the rear axle,Widest point,62,,,,"No shell at the rear axle, only cage and shock towers",,Not measured,Not used: no panel reaches the rear axle
 Shell height at the front axle,Table to top of the shell,51,56.5,4,medium,Level blue photo,,,src/core/dims.ts HOOD.topAtFrontAxle
-Shell height just behind the cockpit,Table to top of the shell,64,72,7,low,"Level blue photo: side-panel top about 67, rear upper body about 78",,,src/core/dims.ts SIDE_POD.top / SIDE_POD.rearTop
+Shell height just behind the cockpit,Table to top of the shell,64,72,7,low,"Level blue photo: side-panel top about 67, rear upper body about 78",,"The blue panel's top is nearly level, about 67 at the cockpit to 69-70 at its rear edge (photos 12, 22); the 78 was the black upper body and vent plate above it, not the panel",src/core/dims.ts SIDE_POD.top / SIDE_POD.rearTop
 Roof height,Table to the roof plate,88,92,3,medium,Level blue photo,,1-3 mm below the wing endplate top,src/core/dims.ts ROOF.top
+Roof plate length,"Front edge (at the light-bar notch) to rear edge, along the car",,51,3,low,"Side views 12 and 22: 0.33-0.37 of the wheelbase, a lower bound (the roof is on the centre plane, the hubs nearer the camera)",,To be confirmed by caliper (issue #5),src/core/dims.ts ROOF.frontX to ROOF.rearX
 Roll-cage tube diameter,Caliper on any tube,3.2,2.2,0.6,low,Bar widths in side and front views,,Not a tube cage: moulded black plastic frame,src/model/car.ts FRAME_R (radius of the moulded frame bars)
 Light bar width,,40,30,4,low,"Turntable front frame and front photo, LED pitch as ruler",,3 white LEDs at 8.5-10 mm pitch,src/core/dims.ts LIGHT_BAR.w
 Light bar height,,8,10,3,low,Turntable front frame,,,src/core/dims.ts LIGHT_BAR.h
@@ -25,7 +26,7 @@ Front bumper height,,26,20,4,low,"Level blue photo: top about 54, bottom about 3
 Front bumper distance ahead of the shell,,,16,6,low,Front face 40-43 mm ahead of the front axle,,,src/core/dims.ts BUMPER.faceX (shell nose: HOOD.tipX)
 Wing span,,95,90,3,medium,A4 top view,,,src/core/dims.ts WING.span
 Wing chord,,32,33,5,low,Blue side view and orange top view,,,src/core/dims.ts WING.chord
-Wing height above table,,90,93,3,medium,"Endplate top, level blue photo; trailing tip about 87",,Trailing tip 39-43 mm behind the rear axle,src/core/dims.ts WING.top (trailing tip: WING.trailX / WING.trailY)
+Wing height above table,,90,93,3,medium,"Endplate top, level blue photo; trailing tip about 87",,"Trailing tip 39-43 mm behind the rear axle; the deck tilts about 11 degrees down to the front, so WILD ROAD on it faces forward (photos 14, 23)",src/core/dims.ts WING.top (trailing tip: WING.trailX / WING.trailY)
 Shock eye to eye at rest,,29,36,5,low,"Rear shock at full droop on the turntable (extended, not at rest)",,,src/core/dims.ts SHOCK.extended (full droop); the drawn length follows the mounts (Shock.update in src/model/car.ts)
 Shock eye to eye fully compressed,,,,,,Not found online,,,Not used: the drawn length follows the mounts (Shock.update in src/model/car.ts)
 Shock body diameter,,6,5.5,1,low,"Ratio to the eye-screw head, assuming M2.6-M3 screws",,,src/core/dims.ts SHOCK.bodyR (radius); spring: SHOCK.springR

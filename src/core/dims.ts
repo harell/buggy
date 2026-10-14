@@ -30,15 +30,22 @@ export const BUMPER = { faceX: XF + 4.15, plateW: 4.4, top: 5.4, bottom: 3.4, ho
 export const HOOD = { tipX: XF + 2.87, wAtFrontAxle: 4.0, topAtFrontAxle: 5.65, rearX: 1.6 } as const;
 /**
  * Blue side panels: 78 mm across the cockpit, widest (84.5 mm) about 42 mm ahead of the rear axle. The front edge
- * (just behind the front tyre) is read off side photos 12, 21 and 22, not measured.
+ * (just behind the front tyre) is read off side photos 12, 21 and 22, not measured. The top is nearly level, rising
+ * only to `rearTop` at the rear edge: the 78 mm once read there was the black upper body above the blue panel.
  */
-export const SIDE_POD = { frontX: 4.0, rearX: XF - 12.0, wCockpit: 7.8, wMax: 8.45, wMaxX: XR + 4.25, top: 6.7, rearTop: 7.8 } as const;
-/** Blue roof plate on the frame, with a U-notch at the front for the light bar. */
-export const ROOF = { top: 9.2, w: 4.2, frontX: 1.3, rearX: -3.3 } as const;
+export const SIDE_POD = { frontX: 4.0, rearX: XF - 12.0, wCockpit: 7.8, wMax: 8.45, wMaxX: XR + 4.25, top: 6.7, rearTop: 6.95 } as const;
+/**
+ * Blue roof plate on the frame, with a U-notch at the front for the light bar. Its rear edge is a photo estimate from
+ * the side views (12, 22), to be confirmed by caliper (issue #5).
+ */
+export const ROOF = { top: 9.2, w: 4.2, frontX: 1.3, rearX: -3.8 } as const;
 /** Three white LEDs in a black bar under the roof's front edge. */
 export const LIGHT_BAR = { x: 1.05, w: 3.0, h: 1.0, pitch: 0.93, lensR: 0.25, leds: 3 } as const;
-/** Black wing on two posts above the gearbox; the endplate tops are the car's highest point. */
-export const WING = { span: 9.0, chord: 3.3, top: 9.3, trailX: XR - 4.1, trailY: 8.7 } as const;
+/**
+ * Black wing on a short lattice above the gearbox. `trailY` is the deck's top at its trailing edge; the deck tilts down
+ * toward the front and its tall endplates rise above it, their tops the car's highest point.
+ */
+export const WING = { span: 9.0, chord: 3.3, top: 9.3, trailX: XR - 4.1, trailY: 8.55 } as const;
 
 /* ---- Chassis, suspension, battery ---- */
 export const CHASSIS = { clearance: 2.5 } as const; // underside of the tub at mid-wheelbase

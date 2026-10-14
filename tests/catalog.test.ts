@@ -24,6 +24,15 @@ describe('part catalogue', () => {
     expect(t).toMatch(/illustrative/);
   });
 
+  it('says the real gearbox is solid black and how to see inside it (issue #10)', () => {
+    for (const k of ['motor', 'gears'] as const) {
+      const t = PART_INFO[k].adult;
+      expect(t, k).toMatch(/solid black/);
+      expect(t, k).toMatch(/take the car apart/i);
+      expect(t, k).not.toMatch(/see-through so you can watch/);
+    }
+  });
+
   it('gives the measured sizes from dims.ts', () => {
     expect(PART_INFO.wheels.adult).toContain(`${cm(2 * R)} cm`);
     expect(PART_INFO.body.adult).toContain(`${cm(OVERALL.length)} × ${cm(OVERALL.width)} × ${cm(OVERALL.height)} cm`);

@@ -13,7 +13,8 @@ export interface MeshMeta {
   op0: number;
   tr0: boolean;
   dw0: boolean;
-  cutaway?: PartKey;
+  /** The parts whose picking turns this cover see-through. */
+  cutaway?: readonly PartKey[];
   isLed?: boolean;
 }
 export type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.Material> & { userData: MeshMeta };
@@ -48,7 +49,7 @@ export const MAT = {
 /** Shared see-through material for everything except the part being looked at. */
 export const GHOST = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.055, depthWrite: false });
 
-export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey; led?: boolean }
+export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean }
 
 /** Make a mesh that belongs to a part. Each mesh gets its own material so it can glow on its own. */
 export function mk(geo: THREE.BufferGeometry, src: MatSource, part: PartKey, o: MkOpts = {}): PartMesh {
@@ -58,7 +59,7 @@ export function mk(geo: THREE.BufferGeometry, src: MatSource, part: PartKey, o: 
   m.receiveShadow = o.receive ?? true;
   m.userData = {
     part, mat, em0: mat.emissive.clone(), emI0: mat.emissiveIntensity, op0: mat.opacity, tr0: mat.transparent, dw0: mat.depthWrite,
-    cutaway: o.cutaway, isLed: o.led,
+    cutaway: o.cutaway === undefined ? undefined : ([] as PartKey[]).concat(o.cutaway), isLed: o.led,
   };
   PARTS[part].meshes.push(m);
   allMeshes.push(m);
@@ -87,7 +88,7 @@ export function applyHighlight(k: PartKey | null): void {
     m.material = on ? base : GHOST;
     m.castShadow = on;
     if (meta.cutaway) {
-      const cut = k === meta.cutaway;
+      const cut = k !== null && meta.cutaway.includes(k);
       base.transparent = cut || meta.tr0;
       base.opacity = cut ? 0.2 : meta.op0;
       base.depthWrite = cut ? false : meta.dw0;

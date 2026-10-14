@@ -5,7 +5,7 @@ import { Controls, type Action } from './core/controls';
 import { bodyHeightAt, createBody, stepSuspension, type CornerBumps } from './core/suspension';
 import { CORNERS, TZ, XF } from './core/dims';
 import { activeFlows } from './core/flow';
-import { clamp, ease, lerp } from './core/math';
+import { clamp, ease, frameStep, lerp } from './core/math';
 import { RideMeter } from './core/ride';
 import { groundHeight } from './core/terrain';
 import { createDrive, stepDrive, wheelWorld } from './core/vehicle';
@@ -253,7 +253,7 @@ void car.decalsReady.then(() => applyHighlight(ui.selected));
 const ledDot = $('led-dot'), gNum = $('g-num'), gNeedle = $('g-needle'), gArc = $('g-arc');
 let last = performance.now();
 function frame(now: number) {
-  const rdt = Math.min(0.05, (now - last) / 1000);
+  const rdt = frameStep(now, last);
   last = now;
   ui.timeScale = lerp(ui.timeScale, ui.slow ? 0.15 : 1, Math.min(1, rdt * 5));
   const dt = rdt * ui.timeScale;

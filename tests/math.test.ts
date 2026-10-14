@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clamp, ease, lerp, mod, rng, TAU } from '../src/core/math';
+import { clamp, ease, frameStep, lerp, mod, rng, TAU } from '../src/core/math';
 
 describe('math helpers', () => {
   it('clamps into a range', () => {
@@ -38,6 +38,14 @@ describe('math helpers', () => {
     expect(sa).toEqual(sb);
     expect(Array.from({ length: 20 }, c)).not.toEqual(sa);
     for (const v of sa) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThan(1); }
+  });
+
+  it('turns frame timestamps into a safe time step', () => {
+    expect(frameStep(1016.7, 1000)).toBeCloseTo(0.0167, 6);
+    // a page that is slow to load can get a first frame stamped before the clock started
+    expect(frameStep(337, 4081)).toBe(0);
+    expect(frameStep(9000, 1000)).toBe(0.05); // a long pause (background tab) is capped
+    expect(frameStep(1100, 1000, 0.02)).toBe(0.02);
   });
 
   it('exposes a full turn', () => {

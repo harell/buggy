@@ -1,35 +1,36 @@
-measurement,how_to_measure,current_guess_mm,measured_mm,notes,where_in_index_html
-Overall length,Bumper tip to wing tip,245,,,"Front bumper (pBumper, x=12.5) to rear wing (wingInner, x=-12.4)"
-Overall width,Outside of the tyres,145,,,"TZ (track/2) plus tyre half-width in TIRE_GEO"
-Overall height,Table to top of the wing,95,,,"Rear wing (wingPivot y=9.0 plus endplates)"
-Wheelbase,Front axle centre to rear axle centre,150,,,"XF / XR / WB constants"
-Front track,Centre of left tread to centre of right tread,114,,,"TZ=5.7 (half track)"
-Rear track,Same at the rear,114,,,"TZ=5.7 (shared with front)"
-Tyre diameter,Across the tread lugs,72,,,"R=3.6 and TIRE_GEO profile"
-Tyre width,Across the tread,30,,,"TIRE_GEO profile (h from -1.5 to 1.5)"
-Rim outer diameter,Including the chrome-look ring,50,,,"RIM_RING (r=2.5)"
-Ground clearance,Table to the lowest chassis point,17,,,"Chassis plate (pChassis, y=1.75)"
-Body shell length,"Shell only, nose to tail",205,,,"Body shell HOOD and DECK loft stations (pShell)"
-Shell width at the front axle,Widest point,76,,,"HOOD stations"
-Shell width at the cockpit,Widest point,80,,,"Side pods loft (section s*3.7) and HOOD/DECK stations"
-Shell width at the rear axle,Widest point,62,,,"DECK stations"
-Shell height at the front axle,Table to top of the shell,51,,,"HOOD stations (pShell offset y)"
-Shell height just behind the cockpit,Table to top of the shell,64,,,"DECK stations"
-Roof height,Table to the roof plate,88,,,"Roll cage roof (put y=8.6, 2.2 mm thick)"
-Roll-cage tube diameter,Caliper on any tube,3.2,,,"Roll cage tube radius r=0.16"
-Light bar width,,40,,,"Light pod extrude depth 4.0"
-Light bar height,,8,,,"Light pod profile y 8.35-9.2 (8.5 in code)"
-Light bar LED lens diameter,,6,,"Also count the LEDs (model has 3)","Light pod lens radius 0.3"
-Front bumper width,,86,,,"pBumper extrude depth 8.6"
-Front bumper height,,26,,,"pBumper profile y 1.85-4.45"
-Front bumper distance ahead of the shell,,,,"No current guess",pBumper
-Wing span,,95,,,"Wing plate z -4.75..4.75"
-Wing chord,,32,,,"Wing plate x -12.25..-9.0"
-Wing height above table,,90,,,"wingPivot y=9.0"
-Shock eye to eye at rest,,29,,,"makeShock (length set by mount points at runtime)"
-Shock eye to eye fully compressed,,,,"No current guess",makeShock
-Shock body diameter,,6,,"Code body is 5.6 mm; collar 8.8 mm","makeShock body radius 0.28"
-Shock spring coil count,,7,,"Value is a coil count, not mm","SPRING_GEO turns=7"
-Suspension travel,How far each wheel rises when you press the corner down,,,"Unknown in current model",
-Steering lock,Wheel angle at full lock (degrees),24,,"Value is degrees, not mm","STEER_MAX=0.42 rad"
-Weight,Car with battery on a kitchen scale (grams),,,"Unknown; value in grams",
+measurement,how_to_measure,current_guess_mm,online_estimate_mm,online_uncertainty_mm,online_confidence,online_basis,measured_mm,notes,where_in_index_html
+Overall length,Bumper tip to wing tip,245,234,9,medium,"Ratio L/wheelbase 1.55-1.67 from top, side and turntable views x wheelbase",,Seller says 245; that seller figure is where the current guess came from,"Front bumper (pBumper, x=12.5) to rear wing (wingInner, x=-12.4)"
+Overall width,Outside of the tyres,145,141.5,3,medium,"A4 top view, perspective-corrected",,Seller says 145,TZ (track/2) plus tyre half-width in TIRE_GEO
+Overall height,Table to top of the wing,95,93,3,medium,"Level blue-car photo on a reflective floor, scaled by the wheel ring",,Wing endplate top,Rear wing (wingPivot y=9.0 plus endplates)
+Wheelbase,Front axle centre to rear axle centre,150,146.5,3,high,"1 cm cutting-mat photo: 91-point grid homography, ruler-checked; A4 and turntable views agree",,Absolute scale for every other value,XF / XR / WB constants
+Front track,Centre of left tread to centre of right tread,114,117,3,medium,"A4 top view, inner/outer tyre silhouettes",,Front/rear difference uncertain (0-8 mm),TZ=5.7 (half track)
+Rear track,Same at the rear,114,119,3,medium,A4 top view,,,TZ=5.7 (shared with front)
+Tyre diameter,Across the tread lugs,72,60,2,high,A4 top view tyre length; hub height in the level photo,,Current model is 12 mm too big,R=3.6 and TIRE_GEO profile
+Tyre width,Across the tread,30,23,2.5,low,A4 top view and turntable front frame,,,TIRE_GEO profile (h from -1.5 to 1.5)
+Rim outer diameter,Including the chrome-look ring,50,33,1,high,3D ring fit on the calibrated mat photo; wheelbase/ring ratio 4.36 in four side views,,"Ring is matte light grey, not chrome, with 5 bolt circles",RIM_RING (r=2.5)
+Ground clearance,Table to the lowest chassis point,17,25,5,low,"Chassis-tub side edge at mid-wheelbase, level blue photo",,Lowest point (gearbox) not measured,"Chassis plate (pChassis, y=1.75)"
+Body shell length,"Shell only, nose to tail",205,149,6,low,Hood tip to rear edge of the painted side panel; about 155 to the rear shock tower,,There is no one-piece shell: painted metal panels on a plastic cage,Body shell HOOD and DECK loft stations (pShell)
+Shell width at the front axle,Widest point,76,40,6,low,"Only the narrow hood is there, between the front shocks",,,HOOD stations
+Shell width at the cockpit,Widest point,80,78,4,low,Side-pod span in the A4 top view,,"Widest point 84.5 +/- 4, about 35-50 mm ahead of the rear axle",Side pods loft (section s*3.7) and HOOD/DECK stations
+Shell width at the rear axle,Widest point,62,,,,"No shell at the rear axle, only cage and shock towers",,Not measured,DECK stations
+Shell height at the front axle,Table to top of the shell,51,56.5,4,medium,Level blue photo,,,HOOD stations (pShell offset y)
+Shell height just behind the cockpit,Table to top of the shell,64,72,7,low,"Level blue photo: side-panel top about 67, rear upper body about 78",,,DECK stations
+Roof height,Table to the roof plate,88,92,3,medium,Level blue photo,,1-3 mm below the wing endplate top,"Roll cage roof (put y=8.6, 2.2 mm thick)"
+Roll-cage tube diameter,Caliper on any tube,3.2,2.2,0.6,low,Bar widths in side and front views,,Not a tube cage: moulded black plastic frame,Roll cage tube radius r=0.16
+Light bar width,,40,30,4,low,"Turntable front frame and front photo, LED pitch as ruler",,3 white LEDs at 8.5-10 mm pitch,Light pod extrude depth 4.0
+Light bar height,,8,10,3,low,Turntable front frame,,,Light pod profile y 8.35-9.2 (8.5 in code)
+Light bar LED lens diameter,,6,5,1,low,About 0.55 x LED pitch,,Count is 3 (matches the model),Light pod lens radius 0.3
+Front bumper width,,86,44,4,low,"Plate only: A4 and orange top views (40-42), front photo (45-49)",,Tubular hoop behind it is about 66 +/- 6 wide overall,pBumper extrude depth 8.6
+Front bumper height,,26,20,4,low,"Level blue photo: top about 54, bottom about 34 mm above the floor",,,pBumper profile y 1.85-4.45
+Front bumper distance ahead of the shell,,,16,6,low,Front face 40-43 mm ahead of the front axle,,,pBumper
+Wing span,,95,90,3,medium,A4 top view,,,Wing plate z -4.75..4.75
+Wing chord,,32,33,5,low,Blue side view and orange top view,,,Wing plate x -12.25..-9.0
+Wing height above table,,90,93,3,medium,"Endplate top, level blue photo; trailing tip about 87",,Trailing tip 39-43 mm behind the rear axle,wingPivot y=9.0
+Shock eye to eye at rest,,29,36,5,low,"Rear shock at full droop on the turntable (extended, not at rest)",,,makeShock (length set by mount points at runtime)
+Shock eye to eye fully compressed,,,,,,Not found online,,,makeShock
+Shock body diameter,,6,5.5,1,low,"Ratio to the eye-screw head, assuming M2.6-M3 screws",,,makeShock body radius 0.28
+Shock spring coil count,,7,9,1,medium,"Counted on front and rear close-ups, including closed end turns",,"Value is a coil count, not mm",SPRING_GEO turns=7
+Suspension travel,How far each wheel rises when you press the corner down,,,,,Not found online,,"Springs only, no oil (buyer)",
+Steering lock,Wheel angle at full lock (degrees),24,,,low,Top-down video shows a 17-25 deg change between two steering states; lock each way is 9-25 deg,,"Degrees, not mm. The seller's 0-30 deg figure is for the DK068",STEER_MAX=0.42 rad
+Weight,Car with battery on a kitchen scale (grams),,,,,Not found online (510 g on one listing is a shipping weight),,"Grams, not mm",
+Battery bay inside,Width x length,,56 x 65,4,medium,Scaled from the 14500 cell in the open-bay photo,,Fits two 14500 cells side by side,

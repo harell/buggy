@@ -34,12 +34,12 @@ export const WING_TILT = (11 * Math.PI) / 180;
 /** Height of the deck's top face at x. */
 export const WING_DECK = (x: number): number => WING.trailY - (x - WING.trailX) * Math.tan(WING_TILT);
 /**
- * Each endplate's side outline (x, y): a tall paddle nearly the full chord long, deepest at the trailing edge where it
- * hangs well below the deck, its top edge sweeping down to a point at the leading edge.
+ * Each endplate's side outline (x, y): a paddle of fairly even width nearly the full chord long, tilted nose-down with
+ * the deck (photos 12, 21, 22). Its rounded top-rear corner is the highest point; it is deepest under the front half.
  */
 export const WING_ENDPLATE: readonly P2[] = (() => {
-  const t = WING.trailX, lead = t + WING.chord, low = WING_DECK(t) - 1.55;
-  return [[lead - 0.12, WING_DECK(lead) + 0.04], [t + 1.7, low + 0.2], [t + 0.45, low], [t, low + 0.12], [t, WING.top - 0.25], [t + 0.3, WING.top], [t + 1.7, WING.top - 0.55]];
+  const t = WING.trailX, lead = t + WING.chord, D = WING_DECK, top = WING.top;
+  return [[t, D(t) - 0.2], [t + 0.3, top], [t + 1.0, top - 0.1], [lead, D(lead) + 0.3], [lead - 0.1, D(lead) - 0.3], [t + 2.1, D(t) - 0.97], [t + 0.6, D(t) - 0.15]];
 })();
 /** The raised centre section on the deck: how high it stands and its half-width at the trailing edge. */
 export const WING_CENTRE = { lift: 0.12, halfW: 2.8 } as const;
@@ -56,7 +56,7 @@ const gearboxTop = (x: number): number => {
  * The short lattice under the wing's centre (photo 30): 4 square struts at x (front, rear) and ±z, standing on the
  * gearbox's top, with rungs round them at two heights.
  */
-export const WING_LATTICE = { x: [-8.75, -9.75] as const, z: 0.85, foot: gearboxTop, rungs: [6.1, 7.2] as const } as const;
+export const WING_LATTICE = { x: [-9.1, -9.75] as const, z: 0.85, foot: gearboxTop, rungs: [6.1, 7.2] as const } as const;
 /** The rear guard's two wrap rails (y), and where each ends behind the tyre (x); both sit at or above the tyre top. */
 export const GUARD = { rails: [5.3, 6.7] as const, endX: [-9.95, -9.55] as const } as const;
 

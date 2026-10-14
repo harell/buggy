@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { R, ROOF, SHOCK, SIDE_POD, TZF, TZR, TYRE_W, WING, XF, XR } from '../src/core/dims';
 import { AXLE, DRIVE_TEETH, G1, MODULE, MOTOR, pitchRadius } from '../src/core/gears';
+import { lerp } from '../src/core/math';
 import { STEER_MAX } from '../src/core/vehicle';
 import { circleInPolygon, interpStations, UP, V, type P2 } from '../src/model/geometry';
 import {
@@ -81,11 +82,25 @@ describe('rear wing (photos 14, 22, 23, 30)', () => {
     expect(WING_DECK(WING.trailX + WING.chord)).toBeCloseTo(WING.trailY - WING.chord * Math.tan(WING_TILT), 9);
   });
 
-  it('has tall paddle endplates, nearly the full chord, hanging well below the deck, their tops the car\'s highest point', () => {
+  it('has paddle endplates nearly the full chord, tilted nose-down, their top-rear corners the car\'s highest point (photos 12, 21, 22)', () => {
+    const lowAt = xs[ys.indexOf(Math.min(...ys))];
     expect(Math.max(...ys)).toBeCloseTo(WING.top, 9);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(2.0);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(2.5);
-    expect(WING_DECK(WING.trailX) - Math.min(...ys)).toBeGreaterThan(1.2); // hangs below the deck at the trailing edge
+    expect(xs[ys.indexOf(Math.max(...ys))]).toBeLessThan(WING.trailX + 0.5 * WING.chord); // highest at the rear
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(1.6);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(2.0);
+    expect(lowAt).toBeGreaterThan(WING.trailX + 0.5 * WING.chord); // deepest under the front half, not a scoop at the back
+    /** Where a vertical line at x crosses the outline. */
+    const slice = (x: number) => WING_ENDPLATE.flatMap(([ax, ay], i) => {
+      const [bx, by] = WING_ENDPLATE[(i + 1) % WING_ENDPLATE.length];
+      return (ax - x) * (bx - x) <= 0 && ax !== bx ? [ay + ((by - ay) * (x - ax)) / (bx - ax)] : [];
+    });
+    const rear = slice(WING.trailX + 0.3);
+    expect(Math.max(...rear) - Math.min(...rear)).toBeLessThan(1.0); // the trailing end is a narrow paddle
+    for (const x of [WING.trailX + 0.1, WING.trailX + WING.chord - 0.1]) { // and still covers both ends of the deck
+      const ys = slice(x);
+      expect(Math.min(...ys), `${x}`).toBeLessThan(WING_DECK(x) - 0.15);
+      expect(Math.max(...ys), `${x}`).toBeGreaterThan(WING_DECK(x) + 0.05);
+    }
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(WING.trailX - 1e-9);
     expect(Math.max(...xs)).toBeLessThanOrEqual(WING.trailX + WING.chord);
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.85 * WING.chord);
@@ -115,6 +130,27 @@ describe('rear wing (photos 14, 22, 23, 30)', () => {
       expect(p.x).toBeLessThan(ROOF.rearX - 1);
       const pillar = B_PILLAR(1).at(-1)!;
       if (Math.abs(p.x - pillar[0]) < 0.5) expect(p.y).toBeGreaterThan(pillar[1] + 0.3);
+    }
+  });
+
+  it('keeps the lattice and its pad clear of the rear shock crossbar at full bump (bumpy road)', () => {
+    const c = REAR_SHOCK_TOP(1), hx = 0.175, hy = 0.275; // the crossbar box's centre and half-size
+    const toBar = (p: THREE.Vector3) => Math.hypot(Math.max(0, Math.abs(p.x - c.x) - hx), Math.max(0, Math.abs(p.y - c.y) - hy));
+    /** Points round the edge of a rectangle x0..x1, y0..y1. */
+    const rim = (x0: number, x1: number, y0: number, y1: number) => {
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= 20; k++) pts.push(V(lerp(x0, x1, k / 20), y0, 0), V(lerp(x0, x1, k / 20), y1, 0), V(x0, lerp(y0, y1, k / 20), 0), V(x1, lerp(y0, y1, k / 20), 0));
+      return pts;
+    };
+    const [xf, xr] = WING_LATTICE.x, a = 0.08;
+    const parts = [...WING_LATTICE.x.map((x) => rim(x - a, x + a, WING_LATTICE.foot(x), WING_DECK(x))), rim(xr - 0.25, xf + 0.25, WING_DECK(xf + 0.25) - 0.2, WING_DECK(xf + 0.25))];
+    const lo = swingFor(R + 0.8), hi = swingFor(R - 0.8);
+    for (let k = 0; k <= 40; k++) {
+      const ang = lerp(lo, hi, k / 40);
+      for (const pts of parts) for (const p of pts) {
+        const q = p.clone().sub(PIVOT).applyAxisAngle(new THREE.Vector3(0, 0, 1), ang).add(PIVOT);
+        expect(toBar(q), `${ang.toFixed(3)} rad at ${p.x.toFixed(2)}, ${p.y.toFixed(2)}`).toBeGreaterThan(0.1);
+      }
     }
   });
 

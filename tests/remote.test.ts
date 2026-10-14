@@ -32,6 +32,22 @@ describe('the DK087 transmitter (version B)', () => {
     expect(trig.max.x - trig.min.x).toBeLessThan(2.4);
   });
 
+  it('is 4.7 tall at the head front, fins included, so the 4.3 wheel fills it', () => {
+    const down = new THREE.Raycaster(new THREE.Vector3(5.4, 20, 1.7), new THREE.Vector3(0, -1, 0)); // onto the top fin, over the wheel's front
+    const top = down.intersectObjects(remote.meshes, false)[0].point.y;
+    const up = new THREE.Raycaster(new THREE.Vector3(4.6, 0, 0), new THREE.Vector3(0, 1, 0)); // in front of the trigger and the foot
+    const chin = up.intersectObjects(remote.meshes, false)[0].point.y;
+    expect(top - chin).toBeGreaterThan(4.55);
+    expect(top - chin).toBeLessThan(4.85);
+    expect(size(remote.wheel).y / (top - chin)).toBeGreaterThan(0.9);
+  });
+
+  it('fills the head\'s front with the wheel: its front edge within about 0.8 of the head front', () => {
+    const head = new THREE.Box3().setFromObject(remote.root).max.x, wheel = new THREE.Box3().setFromObject(remote.wheel);
+    expect(head - wheel.max.x).toBeLessThan(0.85);
+    expect(head - wheel.max.x).toBeGreaterThan(0.4);
+  });
+
   it('turns the wheel only a little at full lock, because steering is on/off', () => {
     expect(WHEEL_TURN).toBeCloseTo(0.45, 2);
   });

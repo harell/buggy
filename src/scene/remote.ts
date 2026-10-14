@@ -40,17 +40,19 @@ export function ctrlOf(hits: readonly THREE.Intersection[]): RemoteCtrl | null {
  */
 const HEAD_X = 5.85, BACK_X = -5.85;
 const HW = 1.65, GW = 1.4, FW = 1.6; // half widths: head side faces, grip, foot
-const WHEEL_C: P2 = [2.3, 10.85]; // 4.3 across
+const WHEEL_C: P2 = [2.95, 10.9]; // 4.3 across, filling the head's front half from its chin nearly to the fin tip (photo 37)
 const BASE_C: P2 = [BACK_X + 1.45, 1.45], BASE_R = 1.45; // fixed decorative wheel, 2.9 across
 
 const mat = {
-  // Black to graphite; the gunmetal sheen in some photos is the light on a slightly metallic plastic.
-  body: new THREE.MeshPhysicalMaterial({ color: 0x24272c, roughness: 0.5, metalness: 0.4, clearcoat: 0.25, clearcoatRoughness: 0.5 }),
-  edge: new THREE.MeshPhysicalMaterial({ color: 0x2c3036, roughness: 0.32, metalness: 0.55, clearcoat: 0.5, clearcoatRoughness: 0.3 }),
-  facet: new THREE.MeshPhysicalMaterial({ color: 0x6a707a, roughness: 0.4, metalness: 0.3, clearcoat: 0.4, clearcoatRoughness: 0.35 }),
-  pocket: new THREE.MeshStandardMaterial({ color: 0x111215, roughness: 0.6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }),
+  // A dark graphite body with gunmetal panels on it (photo 36): metallic paint on plastic, so both carry a sheen.
+  body: new THREE.MeshPhysicalMaterial({ color: 0x363b42, roughness: 0.32, metalness: 0.55, envMapIntensity: 1.2, clearcoat: 0.5, clearcoatRoughness: 0.3 }),
+  edge: new THREE.MeshPhysicalMaterial({ color: 0x4a5058, roughness: 0.3, metalness: 0.6, clearcoat: 0.6, clearcoatRoughness: 0.25 }),
+  facet: new THREE.MeshPhysicalMaterial({ color: 0xa2a9b3, roughness: 0.22, metalness: 0.5, envMapIntensity: 1.5, clearcoat: 0.7, clearcoatRoughness: 0.2 }), // gunmetal
+  pocket: new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.55, metalness: 0.3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x0e0f12, roughness: 0.7 }),
-  wheel: new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 0.55, metalness: 0.25 }),
+  wheel: new THREE.MeshStandardMaterial({ color: 0x2a2e34, roughness: 0.45, metalness: 0.5 }),
+  rim: new THREE.MeshPhysicalMaterial({ color: 0x7a818b, roughness: 0.36, metalness: 0.5, envMapIntensity: 1.15, clearcoat: 0.6, clearcoatRoughness: 0.25 }), // the wheel's lip, spokes, hub
+  dish: new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.75 }),
   tick: new THREE.MeshStandardMaterial({ color: 0x7c828c, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 }),
   slide: new THREE.MeshStandardMaterial({ color: 0xe8461e, roughness: 0.45 }),
   steel: new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 1, roughness: 0.3 }),
@@ -80,35 +82,47 @@ const seam = (pts: readonly P2[], smooth = false) =>
 const lathe = (pts: readonly P2[], seg = 48) => new THREE.LatheGeometry(pts.map(([r, h]) => new THREE.Vector2(r, h)), seg).rotateX(Math.PI / 2); // axis +z
 const disc = (r: number, len: number, seg = 32) => new THREE.CylinderGeometry(r, r, len, seg).rotateX(Math.PI / 2).translate(0, 0, len / 2); // z 0..len
 
+/** A point on a circle round c at angle a (degrees), and points along an arc of it. */
+const polar = ([cx, cy]: P2, r: number, a: number): P2 => [cx + r * Math.cos(THREE.MathUtils.degToRad(a)), cy + r * Math.sin(THREE.MathUtils.degToRad(a))];
+const arc = (c: P2, r: number, a0: number, a1: number, n: number): P2[] => Array.from({ length: n + 1 }, (_, i) => polar(c, r, a0 + ((a1 - a0) * i) / n));
+
 // Side profiles (x, y), traced from the right-side cutout (photo 37) and scaled to the measured height and length.
 const HEAD: P2[] = [
-  [-4.6, 9.85], [-4.3, 10.6], [-3.4, 12.0], [-2.9, 12.38], [-1.6, 12.6], [0.8, 12.85], [2.95, 12.95], // pointed rear tip, swept back, flat top
-  [5.1, 13.4], [5.55, 13.02], // the fin over the wheel's front-top
-  [HEAD_X, 11.3], [5.78, 10.55], [5.05, 9.25], [4.75, 8.6], [4.3, 8.32], // front face and chin
-  [1.0, 8.4], [-2.2, 8.45], [-3.1, 8.85], [-3.85, 9.35], // underside back to the tip
+  [-4.6, 10.2], [-3.05, 11.6], [-1.2, 12.0], [0.9, 12.45], [3.2, 12.96], // a pointed rear tip; the top falls from the wheel to it
+  [4.9, 12.82], [5.55, 12.4], [HEAD_X, 11.9], [HEAD_X, 9.75], [5.62, 9.1], [5.0, 8.76], [4.2, 8.68], // front face and chin
+  [1.0, 8.84], [-2.4, 9.04], [-3.4, 9.42], [-4.1, 9.74], // underside back to the tip
 ];
+const R_FIN = 2.2; // the fins hug the wheel just outside its ribbed rim
+// Swept blades nearly flush with each side face round the wheel's front (photo 36): one rising from the wheel's top to a
+// sharp tip over its front, the remote's highest point (so the head is 4.7 tall at the front), with a steep leading edge
+// down to the head front; and a short hooked one under its front.
+const FIN_TOP: P2[] = [...arc(WHEEL_C, R_FIN, 80, 25, 8), [HEAD_X, 12.1], [5.75, 13.4]];
+const FIN_LOW: P2[] = [...arc(WHEEL_C, R_FIN, -10, -52, 6), polar(WHEEL_C, 2.5, -55), polar(WHEEL_C, 2.95, -24), polar(WHEEL_C, 2.45, -8)];
 const GRIP: P2[] = [
-  [1.4, 8.6], [0.45, 8.1], [0.02, 7.45], [-0.06, 6.85], [0.06, 6.15], [-0.12, 5.75], [-0.38, 5.2], [-0.28, 4.55], // finger grooves
+  [1.5, 9.05], [0.5, 8.25], [0.02, 7.45], [-0.06, 6.85], [0.06, 6.15], [-0.12, 5.75], [-0.38, 5.2], [-0.28, 4.55], // finger grooves
   [-0.42, 4.1], [-0.8, 3.45], [-0.82, 2.7], [-1.2, 2.2], [-4.3, 2.2], [-4.62, 3.2], [-4.5, 4.4], [-4.25, 5.5], [-3.9, 6.4], // raked about 12 degrees
-  [-3.5, 7.3], [-3.05, 8.0], [-2.5, 8.7], [-0.5, 8.9],
+  [-3.5, 7.3], [-3.05, 8.05], [-2.55, 8.95], [-0.5, 9.3],
 ];
 const FOOT: P2[] = [[BASE_C[0], 0], [-0.6, 0.02], [3.3, 0.26], [3.74, 0.5], [3.82, 0.9], [3.55, 1.2], [1.6, 1.85], [-0.6, 2.4], [-2.6, 2.75], [BASE_C[0], 2.75]];
-// A gunmetal frame on each side of the head (inside its chamfer), round a dark pocket for the button and LED (right) or the switch (left).
-const FRAME: P2[] = [[-3.95, 9.95], [-3.85, 10.35], [-2.98, 11.72], [-2.75, 11.9], [-1.55, 12.1], [1.2, 12.38], [1.2, 8.9], [-2.0, 8.92], [-2.85, 9.3], [-3.55, 9.78]];
-const GRIP_PANEL: P2[] = [[-2.85, 8.05], [-0.75, 8.12], [-1.15, 7.3], [-3.6, 6.35], [-3.35, 7.25]]; // photo 37
-const POCKET: P2[] = [[-3.3, 10.15], [-2.6, 11.2], [-0.2, 11.55], [0.9, 11.6], [0.9, 9.9], [-2.4, 9.85]]; // pointed at the back
+// A gunmetal panel on each side of the head (inside its chamfer, running into the rear tip), round a dark pocket for the
+// button and LED (right) or the switch (left).
+const FRAME: P2[] = [[-3.75, 10.2], [-3.5, 10.5], [-2.55, 11.1], [-2.3, 11.2], [-1.2, 11.42], [1.2, 11.9], [1.2, 9.38], [-2.3, 9.58], [-3.05, 9.86]];
+const GRIP_PANEL: P2[] = [[-2.95, 8.25], [-0.75, 8.3], [-1.15, 7.3], [-3.6, 6.35], [-3.35, 7.35]]; // photo 37
+const POCKET: P2[] = [[-3.1, 10.4], [-2.45, 10.85], [-0.2, 11.25], [0.9, 11.4], [0.9, 10.1], [-2.2, 10.05]]; // a band pointed at the back
 const BATTERY_DOOR: P2[] = [[-3.05, 7.25], [-0.45, 7.3], [-0.75, 5.1], [-1.25, 3.4], [-4.1, 3.4], [-3.75, 5.2], [-3.4, 6.5]];
 
 /** The press-on wheel cup (photos 36, 42): ribbed drum, flat lip, dished face with 3 spokes, a hub with 3 ticks. */
 function wheelCup(ctrl: RemoteCtrl | null): THREE.Group {
   const g = new THREE.Group();
   const add = (geo: THREE.BufferGeometry, m: THREE.Material) => { const mesh = new THREE.Mesh(geo, m); if (ctrl) mesh.userData.ctrl = ctrl; g.add(mesh); };
-  add(lathe([[0.6, 0], [2.02, 0], [2.08, 0.06], [2.08, 0.76], [2.03, 0.82], [1.62, 0.82], [1.55, 0.74], [1.5, 0.36], [0.6, 0.36]], 64), mat.wheel);
+  add(lathe([[0.6, 0], [2.02, 0], [2.08, 0.06], [2.08, 0.76]], 64), mat.wheel); // drum
+  add(lathe([[2.08, 0.76], [2.03, 0.82], [1.62, 0.82], [1.55, 0.74]], 64), mat.rim); // the lip, catching the light round the dark dish
+  add(lathe([[1.55, 0.74], [1.5, 0.36], [0.6, 0.36]], 64), mat.dish);
   const ribs: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 40; i++) ribs.push(box(0.1, 0.12, 0.6).translate(2.1, 0, 0.42).rotateZ((i / 40) * TAU));
   add(mergeGeometries(ribs)!, mat.wheel);
-  add(mergeGeometries([-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6].map((a) => box(1.1, 0.52, 0.22).translate(1.05, 0, 0.46).rotateZ(a)))!, mat.edge); // spokes
-  add(disc(0.8, 0.84), mat.wheel); // hub
+  add(mergeGeometries([-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6].map((a) => box(1.1, 0.52, 0.22).translate(1.05, 0, 0.46).rotateZ(a)))!, mat.rim); // spokes
+  add(disc(0.8, 0.84), mat.rim); // hub
   add(disc(0.46, 0.94, 28), mat.body); // cap
   add(disc(0.22, 0.98, 16), mat.wheel);
   for (let i = 0; i < 3; i++) { const a = Math.PI / 2 + (i * TAU) / 3; add(new THREE.CircleGeometry(0.1, 3).rotateZ(a).translate(Math.cos(a) * 0.63, Math.sin(a) * 0.63, 0.841), mat.tick); }
@@ -132,6 +146,7 @@ export function buildRemote(): RemoteModel {
   const twoTone = [mat.body, mat.edge];
   mesh(slab(HEAD, 2 * HW, 0.55, { cz: 0.42 }), twoTone);
   mesh(seam(HEAD), mat.dark);
+  for (const side of [1, -1]) for (const fin of [FIN_TOP, FIN_LOW]) mesh(slab(fin, 0.3, 0.08, { cz: 0.1 }), twoTone, 0, 0, side * (HW + 0.05)); // thin blades, almost flush with the side face
   mesh(slab(GRIP, 2 * GW, 0.36, { smooth: true, cz: 0.3 }), twoTone); // the glossy edge is the finger-groove strip
   mesh(seam(GRIP, true), mat.dark);
   mesh(slab(FOOT, 2 * FW, 0.22, { cz: 0.16 }), twoTone);
@@ -152,32 +167,32 @@ export function buildRemote(): RemoteModel {
   const wheel = put(new THREE.Group(), WHEEL_C[0], WHEEL_C[1], HW); root.add(wheel);
   wheel.add(wheelCup('wheel'));
   const leftDrum = put(wheelCup(null), WHEEL_C[0], WHEEL_C[1], -HW); leftDrum.scale.z = -1; root.add(leftDrum); // matching drum; assumed not to turn
-  const buttonMount = put(new THREE.Group(), -1.05, 10.8, HW); root.add(buttonMount);
+  const buttonMount = put(new THREE.Group(), -0.65, 10.7, HW); root.add(buttonMount);
   const button = new THREE.Group(); buttonMount.add(button);
   mesh(new THREE.TorusGeometry(0.48, 0.06, 8, 28), mat.facet, 0, 0, 0.04, buttonMount);
   mesh(disc(0.4, 0.22, 28), mat.body, 0, 0, 0, button);
   mesh(box(0.5, 0.1, 0.07), mat.facet, 0, 0, 0.24, button); // raised '+'
   mesh(box(0.1, 0.5, 0.07), mat.facet, 0, 0, 0.24, button);
   button.traverse((o) => { if (o instanceof THREE.Mesh) o.userData.ctrl = 'lights'; });
-  const led = add(put(new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), new THREE.MeshStandardMaterial({ color: 0xff4136, emissive: 0xff2010, emissiveIntensity: 2 })), -2.0, 10.62, HW));
-  mesh(new THREE.TorusGeometry(0.18, 0.04, 6, 20), mat.facet, -2.0, 10.62, HW + 0.02);
+  const led = add(put(new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), new THREE.MeshStandardMaterial({ color: 0xff4136, emissive: 0xff2010, emissiveIntensity: 2 })), -1.5, 10.56, HW));
+  mesh(new THREE.TorusGeometry(0.18, 0.04, 6, 20), mat.facet, -1.5, 10.56, HW + 0.02);
 
   // left side: ON/OFF slide (ON at the front), small hole near the rear tip, battery door with one screw (2 x AA inside)
   mesh(box(0.85, 0.3, 0.04), mat.dark, -0.5, 10.6, -HW - 0.01);
   mesh(box(0.4, 0.35, 0.16), mat.slide, -0.27, 10.6, -HW - 0.05);
-  mesh(new THREE.CircleGeometry(0.22, 18).rotateY(Math.PI), mat.dark, -3.55, 10.35, -HW - 0.15);
+  mesh(new THREE.CircleGeometry(0.22, 18).rotateY(Math.PI), mat.dark, -3.25, 10.3, -HW - 0.15);
   mesh(slab(BATTERY_DOOR, 0.08, 0.03), mat.body, 0, 0, -GW - 0.02);
   mesh(disc(0.12, 0.05, 12).rotateY(Math.PI), mat.steel, -1.75, 7.0, -GW - 0.05);
 
   // C-ring trigger under the head front: 2.1 outside, 1.36 finger hole, open at the lower front; it pivots in the head
-  const trigger = put(new THREE.Group(), 2.8, 8.45, 0); root.add(trigger);
+  const trigger = put(new THREE.Group(), 2.8, 8.75, 0); root.add(trigger);
   const ring = new THREE.Shape(); ring.absarc(0, 0, 1.05, -0.7, 4.62, false); ring.absarc(0, 0, 0.68, 4.62, -0.7, true);
-  mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.6, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelOffset: -0.06, bevelSegments: 1, curveSegments: 24 }).translate(0, -1.45, -0.3), mat.body, 0, 0, 0, trigger);
-  for (const a of [-0.7, 4.62]) mesh(box(0.5, 0.16, 0.72), mat.body, Math.cos(a) * 0.87, -1.45 + Math.sin(a) * 0.87, 0, trigger).rotation.z = a; // flared tips
+  mesh(new THREE.ExtrudeGeometry(ring, { depth: 0.6, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelOffset: -0.06, bevelSegments: 1, curveSegments: 24 }).translate(0, -1.45, -0.3), mat.edge, 0, 0, 0, trigger); // gunmetal sheen, photo 36
+  for (const a of [-0.7, 4.62]) mesh(box(0.5, 0.16, 0.72), mat.edge, Math.cos(a) * 0.87, -1.45 + Math.sin(a) * 0.87, 0, trigger).rotation.z = a; // flared tips
   mesh(box(0.7, 0.6, 0.6), mat.body, 0, -0.15, 0, trigger); // stem into the head's slot
   trigger.traverse((o) => { if (o instanceof THREE.Mesh) o.userData.ctrl = 'trigger'; });
 
-  const antennaTip = put(new THREE.Object3D(), 0.6, 12.6, 0); root.add(antennaTip);
+  const antennaTip = put(new THREE.Object3D(), 0.6, 12.0, 0); root.add(antennaTip); // inside the head, under its top
   const meshes: THREE.Mesh[] = [];
   root.traverse((o) => { if (o instanceof THREE.Mesh) meshes.push(o); });
   return { root, wheel, trigger, button, led, antennaTip, meshes };

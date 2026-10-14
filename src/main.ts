@@ -13,7 +13,7 @@ import { ANT_TIP, buildCar } from './model/car';
 import { allMeshes, applyHighlight, GHOST, isShown, PARTS, pulseHighlight } from './model/parts';
 import { poseCar } from './scene/carMotion';
 import { createGround } from './scene/ground';
-import { createRemote } from './scene/remote';
+import { createRemote, ctrlOf, WHEEL_TURN } from './scene/remote';
 import { RingPool } from './scene/rings';
 import { createStage, syncTheme, type Stage } from './scene/stage';
 import { MotorSound } from './ui/audio';
@@ -83,7 +83,7 @@ const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ri
 function renderInfo() {
   const el = $('info'), k = ui.selected;
   if (!k) {
-    el.innerHTML = `<h3>Shuttle 08 off-road buggy</h3><p class="kid">Hold <b>Forward</b> to drive. Turn the wheel to steer. Tap any part of the car to look closer.</p><ul class="facts"><li>1:16 scale</li><li>2WD rear drive</li><li>2.4 GHz radio</li><li>20 km/h</li><li>3.7 V battery</li><li>~45 min</li></ul><p class="adult"><b>For grown-ups</b>The outside is modelled on the seller's photos and size chart. Nobody publishes schematics for this toy, so the inside shows how these generic 1:16 buggies are normally built.</p>`;
+    el.innerHTML = `<h3>Shuttle 08 off-road buggy</h3><p class="kid">Hold <b>Forward</b> to drive. Turn the wheel to steer. Tap any part of the car to look closer.</p><ul class="facts"><li>1:16 scale</li><li>2WD rear drive</li><li>2.4 GHz radio</li><li>20 km/h</li><li>3.7 V battery</li><li>20–30 min</li></ul><p class="adult"><b>For grown-ups</b>The model follows photos and measurements of the real DK087 (factory no. 3699-087). Parts nobody has photographed, such as the gear tooth counts, the steering box and the board layout, are drawn as illustrative examples.</p>`;
     return;
   }
   const p = PARTS[k];
@@ -104,6 +104,7 @@ function select(k: PartKey | null) {
 type Toggle = 'cruise' | 'lights' | 'slow' | 'sound';
 const TOGGLE_IDS: Record<Toggle, string> = { cruise: 't-cruise', lights: 't-lights', slow: 't-slow', sound: 't-sound' };
 function setToggle(name: Toggle, val: boolean) {
+  if (name === 'lights') pressLightsButton(); // on the real car the remote's '+' is what switches them
   if (name === 'cruise') { input.cruise = val; if (val) sound.start(); syncHoldButtons(); }
   else if (name === 'sound') { sound.enabled = val; if (!val) sound.mute(); }
   else ui[name] = val;
@@ -210,33 +211,51 @@ carCanvas.addEventListener('pointerup', (e) => {
 });
 carCanvas.addEventListener('pointermove', (e) => { if (!e.buttons) carCanvas.classList.toggle('picking', !!pickPart(e.clientX, e.clientY)); });
 
-/* ---------------- the 3D remote: drag the wheel, hold the trigger ---------------- */
+/* ---------------- the 3D remote: drag the wheel, hold the trigger, press '+' for the lights ---------------- */
 let wheelGrab: { cx: number; cy: number; a0: number } | null = null;
-let triggerHeld = false;
+// pull toward the grip (or just hold) = forward; push it away, toward the head front, = reverse
+let triggerGrab: { x: number; y: number; fx: number; fy: number; act: Action } | null = null;
+let buttonHeld = false, buttonPulse = 0;
+function pressLightsButton() { buttonPulse = 0.18; ui.ringClock = 1; } // a short press, and a radio ring goes out
 const angleFrom = (g: { cx: number; cy: number }, x: number, y: number) => Math.atan2(-(y - g.cy), x - g.cx);
+function remoteScreen(v: THREE.Vector3) {
+  const p = v.project(remote.camera), r = remoteCanvas.getBoundingClientRect();
+  return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+}
+const remoteCtrlAt = (e: PointerEvent) => ctrlOf(hitsAt(e.clientX, e.clientY, remoteCanvas, remote.camera, remote.meshes));
 remoteCanvas.addEventListener('pointerdown', (e) => {
-  const hit = hitsAt(e.clientX, e.clientY, remoteCanvas, remote.camera, remote.controls)[0];
-  if (!hit) return;
+  const ctrl = remoteCtrlAt(e);
+  if (!ctrl) return;
   e.preventDefault(); remoteCanvas.setPointerCapture(e.pointerId); sound.start();
-  if (hit.object.userData.ctrl === 'trigger') { triggerHeld = true; press('fwd', 'remote'); return; }
-  const p = remote.wheel.getWorldPosition(new THREE.Vector3()).project(remote.camera), r = remoteCanvas.getBoundingClientRect();
-  const c = { cx: r.left + ((p.x + 1) / 2) * r.width, cy: r.top + ((1 - p.y) / 2) * r.height };
-  wheelGrab = { ...c, a0: angleFrom(c, e.clientX, e.clientY) };
+  if (ctrl === 'lights') { buttonHeld = true; setToggle('lights', !ui.lights); return; }
+  if (ctrl === 'trigger') {
+    const a = remoteScreen(remote.trigger.getWorldPosition(new THREE.Vector3())), b = remoteScreen(remote.trigger.localToWorld(new THREE.Vector3(1, 0, 0)));
+    const n = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    triggerGrab = { x: e.clientX, y: e.clientY, fx: (b.x - a.x) / n, fy: (b.y - a.y) / n, act: 'fwd' };
+    press('fwd', 'remote'); return;
+  }
+  const c = remoteScreen(remote.wheel.getWorldPosition(new THREE.Vector3()));
+  wheelGrab = { cx: c.x, cy: c.y, a0: angleFrom({ cx: c.x, cy: c.y }, e.clientX, e.clientY) };
   input.wheelDrag = 0;
 });
 remoteCanvas.addEventListener('pointermove', (e) => {
   if (wheelGrab) {
     let d = angleFrom(wheelGrab, e.clientX, e.clientY) - wheelGrab.a0;
     d = Math.atan2(Math.sin(d), Math.cos(d));
-    input.wheelDrag = clamp(d / 0.6, -1, 1);
+    input.wheelDrag = clamp(d / WHEEL_TURN, -1, 1); // the wheel follows the finger until it hits its stop
     return;
   }
-  const hit = hitsAt(e.clientX, e.clientY, remoteCanvas, remote.camera, remote.controls)[0];
-  remoteCanvas.style.cursor = hit ? (hit.object.userData.ctrl === 'wheel' ? 'grab' : 'pointer') : 'default';
+  if (triggerGrab) {
+    const act: Action = (e.clientX - triggerGrab.x) * triggerGrab.fx + (e.clientY - triggerGrab.y) * triggerGrab.fy > 12 ? 'back' : 'fwd';
+    if (act !== triggerGrab.act) { release(triggerGrab.act, 'remote'); press(act, 'remote'); triggerGrab.act = act; }
+    return;
+  }
+  const ctrl = remoteCtrlAt(e);
+  remoteCanvas.style.cursor = ctrl === 'wheel' ? 'grab' : ctrl ? 'pointer' : 'default';
 });
 const remoteUp = () => {
-  if (triggerHeld) { triggerHeld = false; release('fwd', 'remote'); }
-  wheelGrab = null; input.wheelDrag = null;
+  if (triggerGrab) { release(triggerGrab.act, 'remote'); triggerGrab = null; }
+  wheelGrab = null; input.wheelDrag = null; buttonHeld = false;
 };
 for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) remoteCanvas.addEventListener(ev, remoteUp);
 
@@ -276,7 +295,7 @@ function frame(now: number) {
   if (ui.selected) pulseHighlight(ui.selected, now / 1000);
 
   // radio rings from both antennas while a command is being sent
-  const commanding = input.commanding();
+  const commanding = input.commanding() || buttonPulse > 0; // the '+' button sends a command too
   ui.ringClock += rdt;
   if (commanding && ui.ringClock > 0.32) {
     ui.ringClock = 0;
@@ -288,8 +307,10 @@ function frame(now: number) {
   remoteRings.update(rdt, remote.camera);
 
   // the remote shows what the hands are doing
-  remote.wheel.rotation.z = lerp(remote.wheel.rotation.z, steer * 0.6, Math.min(1, rdt * 14));
+  remote.wheel.rotation.z = lerp(remote.wheel.rotation.z, (input.wheelDrag ?? steer) * WHEEL_TURN, Math.min(1, rdt * 14));
   remote.trigger.rotation.z = lerp(remote.trigger.rotation.z, thr > 0 ? -0.32 : thr < 0 ? 0.24 : 0, Math.min(1, rdt * 14));
+  buttonPulse = Math.max(0, buttonPulse - rdt);
+  remote.button.position.z = lerp(remote.button.position.z, buttonHeld || buttonPulse > 0 ? -0.12 : 0, Math.min(1, rdt * 30));
   const blink = commanding ? (Math.sin((now / 1000) * Math.PI * 14) > 0 ? 2.6 : 0.3) : 1.6;
   remote.led.material.emissiveIntensity = blink;
   ledDot.style.opacity = String(commanding ? (blink > 1 ? 1 : 0.25) : 1);

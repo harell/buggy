@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { mod, rng, TAU } from '../core/math';
-import { groundHeight, TILE } from '../core/terrain';
+import { GROUND, gridLines, groundHeight, TILE } from '../core/terrain';
 import type { Pose } from '../core/vehicle';
 import { canvasTex } from '../model/textures';
 
 export interface Ground { mesh: THREE.Mesh; material: THREE.MeshStandardMaterial; rough: boolean; reshape(): void; follow(p: Pose): void }
 
-const SIZE = 360;
+const SIZE = 2 * GROUND.half;
 
 /** Seamless dirt texture: blotches, grit and pebbles, all wrapped across the tile edges. */
 function dirtTexture(): THREE.CanvasTexture {
@@ -45,11 +45,30 @@ function dirtTexture(): THREE.CanvasTexture {
 }
 
 /**
+ * A flat grid on the given lines in x and z, facing up. UVs run 0..1 across it, as on a PlaneGeometry laid flat.
+ * Fine near the car and coarse far away: about a quarter of the triangles of an even grid this fine.
+ */
+function gridGeometry(xs: readonly number[]): THREE.BufferGeometry {
+  const n = xs.length, pos = new Float32Array(n * n * 3), uv = new Float32Array(n * n * 2), idx: number[] = [];
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const v = j * n + i;
+    pos.set([xs[i], 0, xs[j]], v * 3);
+    uv.set([(xs[i] + SIZE / 2) / SIZE, (SIZE / 2 - xs[j]) / SIZE], v * 2);
+    if (i < n - 1 && j < n - 1) idx.push(v, v + n, v + 1, v + n, v + n + 1, v + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+/**
  * A dirt track that slides under the car (the car stays at the origin). Its heights repeat every
  * TILE, so moving it by whole tiles keeps the bumps under the wheels matching what you see.
  */
 export function createGround(scene: THREE.Scene): Ground {
-  const geo = new THREE.PlaneGeometry(SIZE, SIZE, 240, 240).rotateX(-Math.PI / 2);
+  const geo = gridGeometry(gridLines(GROUND));
   const material = new THREE.MeshStandardMaterial({ map: dirtTexture(), roughness: 0.96, metalness: 0 });
   const mesh = new THREE.Mesh(geo, material);
   mesh.receiveShadow = true;

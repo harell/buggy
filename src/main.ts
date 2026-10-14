@@ -5,12 +5,13 @@ import { Controls, type Action } from './core/controls';
 import { bodyHeightAt, createBody, stepSuspension, type CornerBumps } from './core/suspension';
 import { CORNERS, TZ, XF } from './core/dims';
 import { activeFlows } from './core/flow';
+import { explodeAfterPick, wiresShown } from './core/pick';
 import { clamp, ease, frameStep, lerp } from './core/math';
 import { RideMeter } from './core/ride';
 import { groundHeight } from './core/terrain';
 import { createDrive, stepDrive, wheelWorld } from './core/vehicle';
 import { ANT_TIP, buildCar } from './model/car';
-import { allMeshes, applyHighlight, GHOST, isShown, PARTS, pulseHighlight } from './model/parts';
+import { allMeshes, applyHighlight, GHOST, GHOST_NEAR, isShown, markWireEnds, PARTS, pulseHighlight, quietShadows, setApart } from './model/parts';
 import { poseCar } from './scene/carMotion';
 import { createGround } from './scene/ground';
 import { createRemote, ctrlOf, WHEEL_TURN } from './scene/remote';
@@ -23,6 +24,7 @@ import { LabelLayer } from './ui/labels';
 import { RideGraph } from './ui/rideGraph';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const narrow = matchMedia('(max-width: 760px)'); // phones: the bay sits above the bench (see styles.css)
 const bay = $('bay');
 const carCanvas = $<HTMLCanvasElement>('car');
 const remoteCanvas = $<HTMLCanvasElement>('remote');
@@ -37,6 +39,9 @@ try {
 const { scene, camera, controls: orbit } = stage;
 const ground = createGround(scene);
 const car = buildCar(scene);
+// shadows nobody would see: tiny parts, and what is shut inside the gearbox, the motor can, the steering box and the tub
+quietShadows(0.3, [car.pieces.gear1, car.driveGears.fg, car.driveGears.axle, car.pieces.motor, car.pieces.steerBox, car.pieces.board, car.pieces.battery]);
+markWireEnds([car.pieces.battery, car.pieces.board, car.pieces.motor, car.pieces.steerBox, car.pieces.lights]);
 const remote = createRemote(remoteCanvas);
 const carRings = new RingPool(scene, 0x4f8cff, 2.4);
 const remoteRings = new RingPool(remote.scene, 0x6aa0ff, 3.2);
@@ -50,7 +55,7 @@ const sound = new MotorSound();
 const ui = { lights: true, slow: false, slowManual: false, locked: false, explodeT: 0, explode: 0, timeScale: 1, selected: null as PartKey | null, ringClock: 0 };
 
 // Dev server only (stripped from production builds): lets scripted screenshots set the camera and state.
-if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, input, drive } });
+if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, input, drive, stage, remote } });
 
 /* ---------------- selection & camera ---------------- */
 let camTween: { t: number; dur: number; fT: THREE.Vector3; tT: THREE.Vector3; fP: THREE.Vector3; tP: THREE.Vector3 } | null = null;
@@ -70,8 +75,11 @@ function focusHome(e: number) {
 function focusPart(k: PartKey) {
   car.root.updateMatrixWorld(true);
   const b = new THREE.Box3();
-  for (const m of PARTS[k].meshes) if (m.visible) b.expandByObject(m);
+  // the wires are hidden while the car is apart and picking them puts it back together: frame them where they will be
+  const settling = k === 'wires' && !wiresShown(ui.explode);
+  for (const m of PARTS[k].meshes) if (m.visible || settling) b.expandByObject(m);
   if (b.isEmpty()) return;
+  if (settling) b.translate(new THREE.Vector3(0, -car.root.position.y, 0)); // the car comes back down off its stand
   const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3()).length();
   tweenTo(c, c.clone().addScaledVector(viewDir(0.25, 0.4), clamp(size * 1.9, 14, 80) * stage.fitK()));
 }
@@ -83,7 +91,7 @@ const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ri
 function renderInfo() {
   const el = $('info'), k = ui.selected;
   if (!k) {
-    el.innerHTML = `<h3>Shuttle 08 off-road buggy</h3><p class="kid">Hold <b>Forward</b> to drive. Turn the wheel to steer. Tap any part of the car to look closer.</p><ul class="facts"><li>1:16 scale</li><li>2WD rear drive</li><li>2.4 GHz radio</li><li>20 km/h</li><li>3.7 V battery</li><li>20–30 min</li></ul><p class="adult"><b>For grown-ups</b>The model follows photos and measurements of the real DK087 (factory no. 3699-087). Parts nobody has photographed, such as the gear tooth counts, the steering box and the board layout, are drawn as illustrative examples.</p>`;
+    el.innerHTML = `<h3>Shuttle 08 off-road buggy</h3><p class="kid">Hold <b>Forward</b> to drive. Turn the wheel to steer. Tap any part of the car to look closer.</p><ul class="facts"><li>1:16 scale</li><li>2WD rear drive</li><li>2.4 GHz radio</li><li>up to 20 km/h (box)</li><li>3.7 V battery</li><li>20–30 min</li></ul><p class="adult"><b>For grown-ups</b>The model follows photos and measurements of the real DK087 (factory no. 3699-087). Parts nobody has photographed, such as the gear tooth counts, the steering box and the board layout, are drawn as illustrative examples.</p>`;
     return;
   }
   const p = PARTS[k];
@@ -94,6 +102,8 @@ function select(k: PartKey | null) {
   ui.selected = k;
   for (const kk of PART_ORDER) $(`chip-${kk}`).setAttribute('aria-pressed', String(kk === k));
   $('chip-all').setAttribute('aria-pressed', String(!k));
+  const apartT = explodeAfterPick(k, ui.explodeT);
+  if (apartT !== ui.explodeT) setExplode(apartT);
   applyHighlight(k); renderInfo(); labels.setSelected(k);
   if (k && SLOW_PARTS.includes(k) && !ui.slowManual) setToggle('slow', true);
   if (!k && ui.explodeT < 0.05 && !ui.slowManual) setToggle('slow', false);
@@ -153,19 +163,24 @@ function setExplode(t: number, fromSlider = false) {
 bExplode.onclick = () => setExplode(ui.explodeT > 0.5 ? 0 : 1);
 slider.addEventListener('input', () => setExplode(Number(slider.value) / 100, true));
 
+/** On a phone the bay can be scrolled off (or partly off) screen: bring it back so a picked part's glow is seen. */
+function showBay() {
+  const r = bay.getBoundingClientRect();
+  if (narrow.matches && (r.top < 0 || r.bottom > innerHeight)) bay.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+}
 const chips = $('chips');
 for (const k of PART_ORDER) {
   const b = document.createElement('button');
   b.className = 'chip'; b.id = `chip-${k}`; b.setAttribute('aria-pressed', 'false');
   b.innerHTML = `<i style="--c:${PARTS[k].color}"></i><span>${PARTS[k].chip}</span>`;
-  b.onclick = () => select(ui.selected === k ? null : k);
+  b.onclick = () => { select(ui.selected === k ? null : k); showBay(); };
   chips.append(b);
 }
 {
   const b = document.createElement('button');
   b.className = 'chip'; b.id = 'chip-all'; b.setAttribute('aria-pressed', 'true');
   b.innerHTML = '<i style="--c:var(--ink)"></i><span>Whole car</span>';
-  b.onclick = () => select(null);
+  b.onclick = () => { select(null); showBay(); };
   chips.append(b);
 }
 $('b-reset').onclick = () => { select(null); focusHome(ui.explodeT); };
@@ -198,7 +213,7 @@ function hitsAt(cx: number, cy: number, canvas: HTMLCanvasElement, cam: THREE.Ca
 }
 function pickPart(cx: number, cy: number): PartKey | null {
   const hits = hitsAt(cx, cy, carCanvas, camera, allMeshes.filter((m) => isShown(m)));
-  const h = hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
+  const h = hits.find((x) => { const mt = (x.object as THREE.Mesh).material; return mt !== GHOST && mt !== GHOST_NEAR; }) ?? hits[0];
   return h ? (h.object.userData.part as PartKey) : null;
 }
 let downAt: { x: number; y: number } | null = null;
@@ -281,6 +296,7 @@ function frame(now: number) {
   const dt = rdt * ui.timeScale;
   ui.explode += (ui.explodeT - ui.explode) * Math.min(1, rdt * (reduceMotion ? 30 : 3.2));
   const e = ease(clamp(ui.explode, 0, 1)), onStand = ui.explode > 0.02;
+  setApart(onStand);
 
   const thr = input.throttleTarget(), steer = input.steerTarget();
   const { accel } = stepDrive(drive, thr, steer, dt, onStand);
@@ -315,7 +331,7 @@ function frame(now: number) {
   remote.led.material.emissiveIntensity = blink;
   ledDot.style.opacity = String(commanding ? (blink > 1 ? 1 : 0.25) : 1);
 
-  // speedometer shows real-size speed
+  // speedometer shows real-size speed, full throttle being the box's claimed top speed (not measured yet, issue #9)
   const kmh = Math.abs(drive.throttle) * 20;
   gNum.textContent = String(Math.round(kmh));
   gNeedle.setAttribute('transform', `rotate(${-90 + (kmh / 20) * 180} 60 60)`);

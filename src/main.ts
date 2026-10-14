@@ -5,7 +5,7 @@ import { Controls, type Action } from './core/controls';
 import { bodyHeightAt, createBody, stepSuspension, type CornerBumps } from './core/suspension';
 import { CORNERS, TZ, XF } from './core/dims';
 import { activeFlows } from './core/flow';
-import { explodeAfterPick, wiresShown } from './core/pick';
+import { explodeAfterPick, pickAfterExplode, wiresShown } from './core/pick';
 import { clamp, ease, frameStep, lerp } from './core/math';
 import { RideMeter } from './core/ride';
 import { groundHeight } from './core/terrain';
@@ -24,7 +24,6 @@ import { LabelLayer } from './ui/labels';
 import { RideGraph } from './ui/rideGraph';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const narrow = matchMedia('(max-width: 760px)'); // phones: the bay sits above the bench (see styles.css)
 const bay = $('bay');
 const carCanvas = $<HTMLCanvasElement>('car');
 const remoteCanvas = $<HTMLCanvasElement>('remote');
@@ -153,6 +152,7 @@ addEventListener('blur', () => { input.clear(); syncHoldButtons(); });
 const slider = $<HTMLInputElement>('explode'), bExplode = $('b-explode');
 function setExplode(t: number, fromSlider = false) {
   ui.explodeT = t;
+  if (pickAfterExplode(ui.selected, t) !== ui.selected) select(null); // the wires vanish as it comes apart: go back to the whole car
   if (!fromSlider) slider.value = String(Math.round(t * 100));
   bExplode.setAttribute('aria-pressed', String(t > 0.5));
   bExplode.textContent = t > 0.5 ? 'Put it together' : 'Take it apart';
@@ -163,24 +163,19 @@ function setExplode(t: number, fromSlider = false) {
 bExplode.onclick = () => setExplode(ui.explodeT > 0.5 ? 0 : 1);
 slider.addEventListener('input', () => setExplode(Number(slider.value) / 100, true));
 
-/** On a phone the bay can be scrolled off (or partly off) screen: bring it back so a picked part's glow is seen. */
-function showBay() {
-  const r = bay.getBoundingClientRect();
-  if (narrow.matches && (r.top < 0 || r.bottom > innerHeight)) bay.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
-}
 const chips = $('chips');
 for (const k of PART_ORDER) {
   const b = document.createElement('button');
   b.className = 'chip'; b.id = `chip-${k}`; b.setAttribute('aria-pressed', 'false');
   b.innerHTML = `<i style="--c:${PARTS[k].color}"></i><span>${PARTS[k].chip}</span>`;
-  b.onclick = () => { select(ui.selected === k ? null : k); showBay(); };
+  b.onclick = () => select(ui.selected === k ? null : k);
   chips.append(b);
 }
 {
   const b = document.createElement('button');
   b.className = 'chip'; b.id = 'chip-all'; b.setAttribute('aria-pressed', 'true');
   b.innerHTML = '<i style="--c:var(--ink)"></i><span>Whole car</span>';
-  b.onclick = () => { select(null); showBay(); };
+  b.onclick = () => select(null);
   chips.append(b);
 }
 $('b-reset').onclick = () => { select(null); focusHome(ui.explodeT); };

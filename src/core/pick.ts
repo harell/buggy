@@ -8,3 +8,6 @@ export const wiresShown = (explodeRaw: number): boolean => explodeRaw < WIRES_HI
 
 /** How far apart the car should be after picking a part: picking the wires puts it back together so they can be seen. */
 export const explodeAfterPick = (k: PartKey | null, explodeT: number): number => (k === 'wires' ? 0 : explodeT);
+
+/** What stays picked once the car is taken apart to explodeT: the wires are let go of once that hides them. */
+export const pickAfterExplode = (k: PartKey | null, explodeT: number): PartKey | null => (k === 'wires' && !wiresShown(explodeT) ? null : k);

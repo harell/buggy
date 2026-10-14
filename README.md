@@ -40,8 +40,8 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 
 | Folder | What lives there | Tested |
 | --- | --- | --- |
-| `src/core/` | Pure logic: dimensions, terrain height field, controls, driving model, suspension, gear and rack kinematics, ride meter, label layout, signal-path strip, part catalogue | Yes, `tests/*.test.ts` |
-| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry, canvas textures, the car | Geometry builders and mount points |
+| `src/core/` | Pure logic: dimensions, terrain height field, controls, driving model, suspension, gear and rack kinematics, ride meter, label layout, signal-path strip, part catalogue, what picking a part does | Yes, `tests/*.test.ts` |
+| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (ghosting, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
 | `src/scene/` | Three.js scene: renderer and camera, the moving ground, the remote, radio rings, posing the car each frame | The remote's builder (`tests/remote.test.ts`); the rest visually |
 | `src/ui/` | DOM pieces: labels, signal-path strip, ride graph, sound | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |

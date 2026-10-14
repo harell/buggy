@@ -1,13 +1,30 @@
-import { XR } from './dims';
+import { R, XR } from './dims';
 
 export const pitchRadius = (teeth: number, module: number): number => (teeth * module) / 2;
 
-/* Drive train: 8T pinion → 28T, 10T on the same shaft → 30T on the rear axle. Positions in the car's side view (x, y). */
-export const MODULE = 0.1;
+/*
+ * Drive train. The real motor lies across the car in the right-hand lobe of the gearbox, behind the rear axle.
+ * The tooth counts are illustrative (no photo shows the gears): 8T pinion → 28T, 10T on the same shaft → 30T on the
+ * axle. Positions are in the car's side view (x, y).
+ */
+export const MODULE = 0.08;
 export const DRIVE_TEETH = { pinion: 8, g1Big: 28, g1Small: 10, final: 30 } as const;
-export const MOTOR = { x: -4.1, y: 4.8 } as const;
-export const G1 = { x: -5.9, y: 4.8 } as const;
-export const AXLE = { x: XR, y: 3.6 } as const;
+export const AXLE = { x: XR, y: R } as const;
+export const MOTOR = { x: XR - 2.2, y: R + 0.5 } as const;
+
+/** Where two circles cross, taking the upper crossing. */
+function upperCrossing(a: { x: number; y: number }, ra: number, b: { x: number; y: number }, rb: number) {
+  const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+  const along = (ra * ra - rb * rb + d * d) / (2 * d), up = Math.sqrt(ra * ra - along * along);
+  const ux = dx / d, uy = dy / d, sx = a.x + ux * along, sy = a.y + uy * along;
+  const p1 = { x: sx - uy * up, y: sy + ux * up }, p2 = { x: sx + uy * up, y: sy - ux * up };
+  return p1.y >= p2.y ? p1 : p2;
+}
+/** The middle gear sits where it meshes with both the motor pinion and the axle gear. */
+export const G1 = upperCrossing(
+  MOTOR, pitchRadius(DRIVE_TEETH.pinion, MODULE) + pitchRadius(DRIVE_TEETH.g1Big, MODULE),
+  AXLE, pitchRadius(DRIVE_TEETH.g1Small, MODULE) + pitchRadius(DRIVE_TEETH.final, MODULE),
+);
 export const RATIO = (DRIVE_TEETH.g1Big / DRIVE_TEETH.pinion) * (DRIVE_TEETH.final / DRIVE_TEETH.g1Small);
 
 const toG1 = Math.atan2(G1.y - MOTOR.y, G1.x - MOTOR.x);

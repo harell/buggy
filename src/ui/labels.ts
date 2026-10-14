@@ -49,7 +49,7 @@ export class LabelLayer {
       lights: top(p.lights, p.lights.children[0]),
       wires: { ...top(p.wires, car.wires[2].mesh), visible: () => car.wires[0].mesh.visible },
       chassis: top(p.chassis, p.chassis.children[0]),
-      body: top(p.cage, car.anchors.cage),
+      body: top(p.body, car.anchors.roof),
     };
   }
 

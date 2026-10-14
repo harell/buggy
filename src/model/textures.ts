@@ -28,9 +28,9 @@ export function textTex(text: string, { w = 512, h = 128, size = 92, color = '#f
   });
 }
 
-/** Resolves when the display font is ready (or after 2.5 s), so decals don't render in a fallback face. */
+/** Resolves when the display font's faces are ready (or after 2.5 s), so decals don't render in a fallback face. */
 export const fontsReady: Promise<void> = Promise.race([
-  document.fonts.load('italic 700 80px "Chakra Petch"').then(() => undefined),
+  Promise.all(['italic 700 80px "Chakra Petch"', '700 80px "Chakra Petch"'].map((f) => document.fonts.load(f))).then(() => undefined), // the pods' upright '08' too
   new Promise<void>((r) => setTimeout(r, 2500)),
 ]).catch(() => undefined);
 

@@ -29,28 +29,20 @@ export const allMeshes: PartMesh[] = [];
 
 const std = (o: THREE.MeshStandardMaterialParameters) => () => new THREE.MeshStandardMaterial(o);
 export const MAT = {
-  shell: () => new THREE.MeshPhysicalMaterial({ color: 0x1a58e0, metalness: 0.55, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.08 }),
-  black: std({ color: 0x1a1c20, roughness: 0.62, metalness: 0.05 }),
-  blackGloss: std({ color: 0x121418, roughness: 0.32, metalness: 0.15 }),
-  cage: std({ color: 0x15171a, roughness: 0.45, metalness: 0.1 }),
-  rubber: std({ color: 0x1c1d20, roughness: 0.93 }),
   chrome: std({ color: 0xe4e8ee, metalness: 1, roughness: 0.14 }),
   steel: std({ color: 0xaab2bd, metalness: 0.9, roughness: 0.32 }),
-  ring: std({ color: 0xe9ecf1, metalness: 0.7, roughness: 0.25 }),
   brass: std({ color: 0xd1a63a, metalness: 1, roughness: 0.28 }),
   copper: std({ color: 0xc0672e, metalness: 0.9, roughness: 0.32 }),
   nylon: std({ color: 0xf1ebdc, roughness: 0.5 }),
   nylonDark: std({ color: 0x8f97a3, roughness: 0.45 }),
   bell: std({ color: 0xece6d6, roughness: 0.55 }),
   smoke: std({ color: 0x56606e, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.26, depthWrite: false }),
-  spring: std({ color: 0x2b2e34, metalness: 0.7, roughness: 0.35 }),
   chip: std({ color: 0x15161a, roughness: 0.4 }),
   white: std({ color: 0xf4f4f2, roughness: 0.4 }),
   redWire: std({ color: 0xd3322b, roughness: 0.45 }),
   blackWire: std({ color: 0x26282c, roughness: 0.45 }),
   yellowWire: std({ color: 0xe7b416, roughness: 0.45 }),
   blueWire: std({ color: 0x2a64d6, roughness: 0.45 }),
-  led: std({ color: 0xfdfbf2, roughness: 0.15, emissive: 0xfff6d8, emissiveIntensity: 2 }),
 } satisfies Record<string, () => StdMat>;
 
 /** Shared see-through material for everything except the part being looked at. */

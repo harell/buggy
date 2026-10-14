@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { R, XR } from '../src/core/dims';
 import {
   AXLE, DRIVE_TEETH, driveAngles, G1, MODULE, MOTOR, pitchRadius, RATIO,
   rackTravel, STEER_TEETH, STEER_MODULE, steerGearAngles, STEER_ARM,
@@ -10,6 +11,23 @@ describe('gear layout', () => {
   it('places gears so their pitch circles touch', () => {
     expect(dist(MOTOR, G1)).toBeCloseTo(pitchRadius(DRIVE_TEETH.pinion, MODULE) + pitchRadius(DRIVE_TEETH.g1Big, MODULE), 6);
     expect(dist(G1, AXLE)).toBeCloseTo(pitchRadius(DRIVE_TEETH.g1Small, MODULE) + pitchRadius(DRIVE_TEETH.final, MODULE), 6);
+  });
+
+  it('drives the rear axle at wheel-centre height', () => {
+    expect(AXLE.x).toBe(XR);
+    expect(AXLE.y).toBe(R);
+  });
+
+  it('sits the motor crosswise behind the rear axle, as on the real car', () => {
+    expect(MOTOR.x).toBeLessThan(AXLE.x - 1.5);
+    expect(G1.y).toBeGreaterThan(Math.min(MOTOR.y, AXLE.y)); // the idler gear rides above the line between them
+  });
+
+  it('keeps every gear tooth well clear of the ground', () => {
+    const tip = (teeth: number) => pitchRadius(teeth, MODULE) + MODULE;
+    expect(AXLE.y - tip(DRIVE_TEETH.final)).toBeGreaterThan(1.2);
+    expect(G1.y - tip(DRIVE_TEETH.g1Big)).toBeGreaterThan(1.2);
+    expect(MOTOR.y - tip(DRIVE_TEETH.pinion)).toBeGreaterThan(1.2);
   });
 
   it('reduces the motor speed about 10.5 times', () => {

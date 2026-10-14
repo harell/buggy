@@ -15,6 +15,8 @@ Each topic was answered by one agent and then re-checked by a second agent that 
 
 ## What changes in the model
 
+**Note:** the 3D model now follows these findings. Its sizes are constants in `src/core/dims.ts`, and the `where_in_code` column of [`measurements.csv`](measurements.csv) names the constant that uses each value. In the rest of this file, "the model" and `index.html` mean the first version, before these changes.
+
 These are the findings most likely to change `index.html`. Each one is backed by photos of the real car, not seller renders.
 
 1. **The wheels are much smaller.** Tyres are 60 ± 2 mm, not 72. The wheel ring is 33 ± 1 mm, not 50. It is matte light grey (about `#B0BEC8`), not chrome, with 5 moulded bolt circles. The rim has 5 Y-split spokes and a single central Phillips screw.

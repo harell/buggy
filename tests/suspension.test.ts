@@ -57,4 +57,20 @@ describe('suspension', () => {
     const b = { ...createBody(), heave: 1, pitch: 0.1, roll: 0.02 };
     expect(bodyHeightAt(b, 7.5, -5.7)).toBeCloseTo(1 + 0.75 + 0.114, 9);
   });
+
+  it('ignores a time step that is zero or negative', () => {
+    const b = createBody();
+    stepSuspension(b, flat(0.5), { ...opts, locked: false, dt: -3.7 });
+    stepSuspension(b, flat(0.5), { ...opts, locked: false, dt: 0 });
+    expect(b).toEqual(createBody());
+  });
+
+  it('stays stable when a frame takes much longer than usual', () => {
+    for (const dt of [0.1, 0.25, 1]) {
+      const b = createBody();
+      for (let i = 0; i < 50; i++) stepSuspension(b, flat(0.5), { ...opts, locked: false, dt });
+      expect(Math.abs(b.heave - 0.45)).toBeLessThan(0.05);
+      expect(Math.abs(b.pitch)).toBeLessThan(0.01);
+    }
+  });
 });

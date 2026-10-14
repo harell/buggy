@@ -1,5 +1,8 @@
 export type Action = 'fwd' | 'back' | 'left' | 'right';
 
+/** How far (of -1..1) the remote's wheel turns before its switch clicks. */
+export const WHEEL_DEAD_ZONE = 0.25;
+
 /**
  * What the driver is asking for. Several sources (buttons, keys, the 3D remote) can hold the same
  * action at once; it stays held until every source lets go.
@@ -25,10 +28,13 @@ export class Controls {
     return this.isHeld('fwd') || this.cruise ? 1 : 0;
   }
 
-  /** Positive is left. */
-  steerTarget(): number {
-    if (this.wheelDrag !== null) return this.wheelDrag;
-    return (this.isHeld('left') ? 1 : 0) - (this.isHeld('right') ? 1 : 0);
+  /**
+   * Positive is left. The real remote has on/off switches behind its wheel, so steering is only ever full left,
+   * straight or full right; a small turn of the wheel stays inside the centre dead zone.
+   */
+  steerTarget(): -1 | 0 | 1 {
+    if (this.wheelDrag !== null) return Math.abs(this.wheelDrag) < WHEEL_DEAD_ZONE ? 0 : this.wheelDrag > 0 ? 1 : -1;
+    return ((this.isHeld('left') ? 1 : 0) - (this.isHeld('right') ? 1 : 0)) as -1 | 0 | 1;
   }
 
   commanding(): boolean { return this.throttleTarget() !== 0 || this.steerTarget() !== 0; }

@@ -50,11 +50,31 @@ describe('shadow casters', () => {
     expect(gear.castShadow).toBe(false); // ghosted
     applyHighlight('gears');
     expect(gear.castShadow).toBe(true);
+    applyHighlight(null);
+    expect(gear.castShadow).toBe(true); // still apart
     setApart(false);
     expect(gear.castShadow).toBe(false);
-    applyHighlight(null);
-    expect(gear.castShadow).toBe(false);
     expect(cover.castShadow).toBe(true);
+  });
+
+  it('takes the shadow off a cover while it is opened up, and gives the parts inside theirs (issue #10 housing)', () => {
+    const housing = new THREE.Group();
+    const gear = mk(new THREE.CylinderGeometry(1.5, 1.5, 0.3), grey, 'gears');
+    const cover = mk(cube(4), grey, 'gears', { cutaway: ['gears', 'motor'] });
+    housing.add(gear, cover);
+    quietShadows(0.3, [housing]);
+    applyHighlight(null);
+    expect(cover.castShadow).toBe(true); // solid black: its shadow hides theirs
+    expect(gear.castShadow).toBe(false);
+    applyHighlight('gears'); // see-through now, so a full shadow would darken the gears it shows
+    expect(cover.castShadow).toBe(false);
+    expect(gear.castShadow).toBe(true);
+    applyHighlight('motor'); // both ghosted
+    expect(cover.castShadow).toBe(false);
+    expect(gear.castShadow).toBe(false);
+    applyHighlight(null);
+    expect(cover.castShadow).toBe(true);
+    expect(gear.castShadow).toBe(false);
   });
 });
 
@@ -74,5 +94,19 @@ describe('ghosting while Wires is picked', () => {
     expect(battery.material).toBe(GHOST);
     applyHighlight(null);
     expect(battery.material).toBe(battery.userData.mat);
+  });
+
+  it('ghosts a wire end that is also a cover lightly, and keeps the cover shut underneath', () => {
+    const can = mk(cube(2), grey, 'motor', { cutaway: ['motor', 'gears'] });
+    const ends = new THREE.Group(); ends.add(can);
+    markWireEnds([ends]);
+    applyHighlight('motor');
+    expect(can.userData.mat.transparent).toBe(true);
+    applyHighlight('wires');
+    expect(can.material).toBe(GHOST_NEAR);
+    expect(can.userData.mat.transparent).toBe(false);
+    expect(can.userData.mat.opacity).toBe(1);
+    applyHighlight(null);
+    expect(can.material).toBe(can.userData.mat);
   });
 });

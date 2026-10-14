@@ -37,7 +37,6 @@ export const MAT = {
   nylon: std({ color: 0xf1ebdc, roughness: 0.5 }),
   nylonDark: std({ color: 0x8f97a3, roughness: 0.45 }),
   bell: std({ color: 0xece6d6, roughness: 0.55 }),
-  smoke: std({ color: 0x56606e, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.26, depthWrite: false }),
   chip: std({ color: 0x15161a, roughness: 0.4 }),
   white: std({ color: 0xf4f4f2, roughness: 0.4 }),
   redWire: std({ color: 0xd3322b, roughness: 0.45 }),
@@ -54,10 +53,13 @@ const wireEnds = new WeakSet<THREE.Object3D>();
 
 /** Meshes that never cast a shadow: made with cast: false, or too small for theirs to show. */
 const noShadow = new WeakSet<THREE.Object3D>();
-/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart. */
+/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or a part is picked. */
 const shutIn = new WeakSet<THREE.Object3D>();
 let apart = false, lit: PartKey | null = null;
-const casts = (m: PartMesh) => (!lit || m.userData.part === lit) && !noShadow.has(m) && (apart || !shutIn.has(m));
+/** A cover opened up for the picked part: see-through, so it casts no shadow onto what it shows. */
+const cutOpen = (m: PartMesh) => lit !== null && !!m.userData.cutaway?.includes(lit);
+// with a part picked, everything else is ghosted and its own covers are open, so what is shut inside shows
+const casts = (m: PartMesh) => (!lit || m.userData.part === lit) && !noShadow.has(m) && !cutOpen(m) && (apart || lit !== null || !shutIn.has(m));
 
 export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean }
 
@@ -100,7 +102,7 @@ export function applyHighlight(k: PartKey | null): void {
     m.material = on ? base : k === 'wires' && wireEnds.has(m) ? GHOST_NEAR : GHOST;
     m.castShadow = casts(m);
     if (meta.cutaway) {
-      const cut = k !== null && meta.cutaway.includes(k);
+      const cut = cutOpen(m);
       base.transparent = cut || meta.tr0;
       base.opacity = cut ? 0.2 : meta.op0;
       base.depthWrite = cut ? false : meta.dw0;
@@ -112,8 +114,8 @@ export function applyHighlight(k: PartKey | null): void {
 
 /**
  * Stop meshes casting shadows nobody would see (call once the car is built): any whose world bounding radius is
- * under `minRadius`, and any under `inside` (the gearbox, the motor can, the electronics tub) except the covers
- * themselves, which cast only while the car is apart.
+ * under `minRadius`, and the ones under `inside` (the gearbox, the motor can, the electronics tub) other than the
+ * covers, whose shadow shows only while the car is apart or a part is picked.
  */
 export function quietShadows(minRadius: number, inside: readonly THREE.Object3D[]): void {
   for (const m of allMeshes) {

@@ -10,7 +10,7 @@ The car is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), shown in b
 
 | Area | How it works |
 | --- | --- |
-| Remote (left) | Fixed view. Drag its wheel to steer and hold its trigger to drive (push the trigger away to reverse). Its **+** button switches the lights, as on the real remote. The Forward / Back / Left / Right buttons and the arrow keys (or WASD) do the same. **Keep going** drives forward without holding. On a phone the car stays pinned at the top of the screen and the four drive buttons sit in a bar along the bottom. |
+| Remote (left) | Fixed view. Drag its wheel to steer and hold its trigger to drive (push the trigger away to reverse). Its **+** button switches the lights, as on the real remote. The Forward / Back / Left / Right buttons and the arrow keys (or WASD) do the same. **Keep going** drives forward without holding. On a phone held upright the car stays pinned at the top of the screen and the four drive buttons sit in a bar along the bottom; held sideways, the remote and the car sit side by side. |
 | Car (right) | Drag to spin, scroll or pinch to zoom, right-drag to slide. The car stays in place while the dirt track moves under it. |
 | Take it apart | A button and a slider spread the parts out into an exploded view. Every part keeps moving while it is apart. |
 | Look closer | Engine, Gears, Battery, Brain, Steering, Springs, Wheels, Lights, Wires, Frame or Body. The rest of the car turns see-through, the part glows and the camera moves to it. A short explanation for children and a note for grown-ups appear underneath. You can also tap a part in 3D. |

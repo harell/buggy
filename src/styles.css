@@ -90,7 +90,7 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
 .gauge .num{font-family:var(--font-display);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;line-height:1}
 .gauge .unit{font-size:11px;color:var(--muted)}
 .gauge .claim{font-size:10px;color:var(--muted);margin-top:1px}
-.flow{position:absolute;left:16px;bottom:16px;right:182px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.flow{position:absolute;left:16px;bottom:16px;right:196px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
 .flow-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px;pointer-events:auto}
 .flow-row .tag{font-family:var(--font-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px;min-width:56px}
 .flow button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;opacity:.55}
@@ -109,9 +109,11 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
 .dbtn[aria-pressed="true"]{background:var(--glow-soft);border-color:var(--glow)}
 .dbtn:focus-visible{outline:3px solid var(--glow);outline-offset:2px}
 .nogl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
-/* Phones: the car stays pinned at the top while the lesson scrolls under it, and the drive buttons sit in a bar at the
-   bottom where a thumb reaches them. A flex column, not a grid, so the bay can stick for the whole page. */
-@media (max-width:760px){
+/* Phones held upright: the car stays pinned at the top while the lesson scrolls under it, and the drive buttons sit in a
+   bar at the bottom where a thumb reaches them. A flex column, not a grid, so the bay can stick for the whole page. */
+@media (max-width:760px) and (min-height:521px){
+  /* focus and scrollIntoView stop short of the pinned bay and the drive bar instead of hiding behind them */
+  html{scroll-padding-top:max(48svh,250px);scroll-padding-bottom:calc(84px + env(safe-area-inset-bottom))}
   body{overflow:auto}
   .app{display:flex;flex-direction:column;height:auto}
   .bay{order:-1;position:sticky;top:0;z-index:3;flex:none;height:48vh;height:48svh;min-height:250px;border-bottom:1px solid var(--line)}
@@ -119,15 +121,33 @@ h2{font-family:var(--font-display);font-size:13px;letter-spacing:.1em;text-trans
   #remote{height:220px}
   .pad{position:fixed;left:0;right:0;bottom:0;z-index:5;grid-template-columns:repeat(4,1fr);grid-template-areas:"left right back fwd";gap:6px;padding:8px max(12px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:var(--panel);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgba(10,20,40,.12)}
   .hold{min-height:58px;font-size:min(14px,3.6vw);gap:4px;padding:0 4px;white-space:nowrap}
-  .flow{right:16px;bottom:92px}
-  .gauge{width:110px;bottom:12px;padding:6px 8px 4px}
-  .hint{display:none}
-  .ride{top:56px;width:200px}
 }
-/* Short landscape screens keep the side-by-side layout; a shorter remote lets the drive buttons fit above the fold. */
-@media (min-width:761px) and (max-height:520px){
+/* Short landscape screens, phones included, keep the side-by-side layout; a shorter remote lets the drive buttons fit
+   above the fold. */
+@media (max-height:520px) and (orientation:landscape){
   .bench{padding-top:10px;gap:10px}
   #remote{height:170px}
   .hold{min-height:44px}
+}
+/* A short or narrow bay (phones either way up): small overlays along its edges, so the car and its wheels stay in sight. */
+@media (max-width:760px) and (min-height:521px),(max-height:520px) and (orientation:landscape){
+  .hint{display:none}
+  .hud{top:8px;right:8px}
+  .hud button{padding:6px 10px;font-size:12px}
+  .flow{top:46px;bottom:auto;left:8px;right:8px;gap:3px}
+  .flow-row{gap:2px 3px}
+  .flow-row .tag{display:none}
+  .flow button{padding:2px 7px;font-size:11px}
+  .flow .arr{font-size:10px}
+  .bay.ride-on .flow{display:none}
+  .gauge{width:84px;right:8px;bottom:8px;padding:4px 6px 3px}
+  .gauge .num{font-size:17px}
+  .gauge .unit{font-size:9px}
+  .gauge .claim{display:none}
+  .ride{top:8px;left:8px;width:170px;padding:6px 8px}
+  .ride h4{font-size:10px}
+  .ride canvas{height:44px}
+  .ride .key{display:none}
+  .ride .feel{font-size:12px}
 }
 @media (prefers-reduced-motion:reduce){.hold,.flow button{transition:none}}

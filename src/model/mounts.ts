@@ -106,17 +106,20 @@ export const surfHood = (x: number, z: number): number => {
 };
 /**
  * Side pods: a horizontal ledge along the middle, the lower edge cut back in an arch round the front tyre (`archF` from
- * the axle centre) and, behind the point where the ledge runs out (`cutX`), rising in a straight diagonal to `cutTop`
- * at the rear, following the rear tyre (photos 12, 21, 22). So the panel is a long, low shape between the wheels and
- * its WILD ROAD section a tapered wedge.
+ * the axle centre) and, from under the WILD ROAD frame's rear end (`cutX`), rising in a straight diagonal to `cutTop`
+ * at the rear, following the rear tyre (photos 12, 21, 22). So the panel is a long, low shape between the wheels, the
+ * diagonal only chamfering the frame's lower rear corner.
  */
-export const POD = { ledge: 5.55, bottom: 3.5, archF: 3.65, cutX: -2.0, cutTop: 5.6 } as const;
+export const POD = { ledge: 5.55, bottom: 3.5, archF: 3.65, cutX: -3.1, cutTop: 5.6 } as const;
 /** Where the ledge has run out: behind it the pod is one flat panel (it carries WILD ROAD). */
 export const LEDGE_END = -2.05;
 const arch = (x: number, ax: number, r: number) => (Math.abs(x - ax) < r ? R + Math.sqrt(r * r - (x - ax) ** 2) : -Infinity);
 /** Height of a pod's lower edge at x. */
 export const podBottom = (x: number): number =>
   Math.max(POD.bottom, arch(x, XF, POD.archF), lerp(POD.bottom, POD.cutTop, Math.max(0, Math.min(1, (POD.cutX - x) / (POD.cutX - SIDE_POD.rearX)))));
+/** The WILD ROAD frame on each pod's flat rear panel: front and rear x, top; its lower edge keeps clear of the pod's cut. */
+export const wildBottom = (x: number): number => podBottom(x) + 0.32;
+export const WILD = { x0: -2.15, x1: -3.55, top: 6.6, y0: wildBottom(-2.15) } as const; // its top just under the pod's top edge
 /**
  * Pod stations, front to rear: [x, outer half-width, top, how far the upper face steps in above the ledge]. The top
  * sweeps up from about hood height just behind the front tyre to the B-pillar; the ledge runs out just behind the

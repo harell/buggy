@@ -9,7 +9,7 @@ import {
 } from './geometry';
 import { MAT, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
 import {
-  B_PILLAR, FRONT_PANEL, GUARD, WING_CENTRE, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, hoodSection, surfHood, FRONT_PIVOT, POD, POD_ST, podBottom, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
+  B_PILLAR, FRONT_PANEL, GUARD, WING_CENTRE, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, hoodSection, surfHood, FRONT_PIVOT, POD, POD_ST, podBottom, WILD, wildBottom, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
   type Perforated,
 } from './mounts';
 import { canvasTex, decal, fontsReady, textTex } from './textures';
@@ -80,9 +80,6 @@ function onPod(pts: P2[], s: number): THREE.BufferGeometry {
   for (let i = 0; i < p.count; i++) p.setZ(i, s * (podZ(p.getX(i), p.getY(i)) + 0.01));
   return g;
 }
-/** The WILD ROAD frame on each pod's flat rear panel: front and rear x, top; its lower edge follows the pod's cut. */
-const wildBottom = (x: number) => podBottom(x) + 0.32;
-const WILD = { x0: -2.15, x1: -3.55, top: 6.6, y0: wildBottom(-2.15) } as const; // its top just under the pod's top edge
 /**
  * Roof plate (photos 15, 17): waisted, with chamfered corners; a deep U-notch at the front, about half its width, between
  * broad downturned legs (the light bar tucks under the plate there, its LEDs in the notch); a wide shallow notch at the
@@ -677,23 +674,25 @@ export function buildCar(scene: THREE.Scene): Car {
     const hoodShuttle = textTex('SHUTTLE', { size: 100, color: W, letter: 3 });
     const pod08 = textTex('08', { w: 256, h: 200, size: 190, color: INK, italic: false });
     const podShuttle = textTex('SHUTTLE', { size: 96, color: W, letter: 2 });
-    // the WILD ROAD frame: an upright front edge and a flat top, its lower edge slanting up parallel to the pod's cut
-    // (photos 12, 22), the words in its rear half. The canvas runs along the words (up the left pod, down the right
-    // one) and from the frame's front (its top row) to its rear.
+    // the WILD ROAD frame: nearly a rectangle, upright front and rear edges, a flat top and a level lower edge with a
+    // short chamfer at its lower rear corner where the pod's cut begins (photos 12, 22), the words in its rear half.
+    // The canvas runs along the words (up the left pod, down the right one) and from the frame's front (its top row)
+    // to its rear.
     const wildFrame = (s: number) => canvasTex(512, 300, (g, w, h) => {
       // a bold stroke (about 1.7 mm, photos 12, 22, 26, 30), kept inside the decal's edges
       const cu = (y: number) => (s < 0 ? y - WILD.y0 : WILD.top - y) / (WILD.top - WILD.y0) * w, cv = (x: number) => ((WILD.x0 - x) / (WILD.x0 - WILD.x1)) * h, e = 0.1;
-      const corners: P2[] = [[WILD.x0 - e, wildBottom(WILD.x0 - e) + e], [WILD.x0 - e, WILD.top - e], [WILD.x1 + e, WILD.top - e], [WILD.x1 + e, wildBottom(WILD.x1 + e) + e]];
+      const corners: P2[] = [[WILD.x0 - e, wildBottom(WILD.x0 - e) + e], [WILD.x0 - e, WILD.top - e], [WILD.x1 + e, WILD.top - e], [WILD.x1 + e, wildBottom(WILD.x1 + e) + e], [POD.cutX, wildBottom(POD.cutX) + e]];
       g.strokeStyle = W; g.lineWidth = 36; g.lineJoin = 'miter'; g.beginPath();
       corners.forEach(([x, y], i) => (i ? g.lineTo(cu(y), cv(x)) : g.moveTo(cu(y), cv(x)))); g.closePath(); g.stroke();
-      // big bold letters filling the frame's length just behind its middle, drawn tall (the frame is short for 9 letters)
-      const xt = lerp(WILD.x0, WILD.x1, 0.56), a = cu(wildBottom(xt) + 0.26), b = cu(WILD.top - 0.28), tall = 1.5;
+      // big bold letters running about 80% of the frame's length behind its middle, drawn tall (9 letters on a short frame)
+      const xt = lerp(WILD.x0, WILD.x1, 0.66), a = cu(wildBottom(xt) + 0.22), b = cu(WILD.top - 0.24), tall = 1.5;
       g.fillStyle = g.strokeStyle = W; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'italic 700 100px "Chakra Petch","Arial Black",sans-serif';
       const fit = (0.94 * Math.abs(b - a)) / g.measureText('WILD ROAD').width, size = Math.floor(100 * fit);
       g.font = `italic 700 ${size}px "Chakra Petch","Arial Black",sans-serif`; g.lineWidth = size * 0.09; g.lineJoin = 'round';
       g.save(); g.translate((a + b) / 2, cv(xt)); g.scale(1, tall); g.fillText('WILD ROAD', 0, 0); g.strokeText('WILD ROAD', 0, 0); g.restore();
     });
-    const wingText = textTex('WILD ROAD', { w: 1024, h: 160, size: 112, letter: 4, color: W });
+    // bold, about 0.65 tall across the chord and 45% of the span (photos 15, 23): drawn a little tall, outlined in its own colour
+    const wingText = textTex('WILD ROAD', { w: 1024, h: 184, size: 140, letter: 3, color: W, stroke: W });
     const stripe = canvasTex(16, 16, (g, w, h) => { g.fillStyle = W; g.fillRect(0, 0, w, h); });
     const X = V(1, 0, 0), Y = V(0, 1, 0), Z = V(0, 0, 1), NX = V(-1, 0, 0), NZ = V(0, 0, -1), NY = V(0, -1, 0);
     // roof and wing read from the front; the hood reads from the left side, front to rear
@@ -712,7 +711,7 @@ export function buildCar(scene: THREE.Scene): Car {
       sticker(pBody, 'body', wildFrame(s), WILD.top - WILD.y0, WILD.x0 - WILD.x1, V((WILD.x0 + WILD.x1) / 2, (WILD.top + WILD.y0) / 2, 0), s < 0 ? Y : NY, X, onSide); // reads bottom to top on the left
     }
     const wx = WING.trailX + 1.05 * Math.cos(WING_TILT), up = V(-Math.cos(WING_TILT), Math.sin(WING_TILT), 0); // letter tops toward the trailing edge
-    sticker(wing, 'chassis', wingText, 5.2, 0.92, V(wx, WING_DECK(wx) + WING_CENTRE.lift + 0.012, 0), NZ, up);
+    sticker(wing, 'chassis', wingText, 5.2, 1.2, V(wx, WING_DECK(wx) + WING_CENTRE.lift + 0.012, 0), NZ, up);
   });
 
   return {

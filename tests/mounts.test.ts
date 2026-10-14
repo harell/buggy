@@ -7,7 +7,7 @@ import { STEER_MAX } from '../src/core/vehicle';
 import { circleInPolygon, interpStations, UP, V, type P2 } from '../src/model/geometry';
 import {
   FRONT_PANEL, FRONT_SHOCK_LOW, LEDGE_END, FRONT_SHOCK_TOP, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, kingpinSwing, PIVOT, POD, POD_ST, podBottom, RACK_END, REAR_PANEL, REAR_SHOCK_LOW,
-  REAR_SHOCK_TOP, STEER_ARM_END, surfHood, swingFor, TUB, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, GUARD, B_PILLAR, GEARBOX,
+  REAR_SHOCK_TOP, STEER_ARM_END, surfHood, swingFor, TUB, WILD, wildBottom, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, GUARD, B_PILLAR, GEARBOX,
 } from '../src/model/mounts';
 
 const SIDES = [-1, 1] as const;
@@ -229,11 +229,20 @@ describe('body panels', () => {
     }
   });
 
+  it('keeps the WILD ROAD frame nearly a rectangle, the pod\'s cut only chamfering its lower rear corner (photo 12)', () => {
+    const h = (x: number) => WILD.top - wildBottom(x);
+    expect(WILD.x0).toBeLessThan(LEDGE_END); // on the flat panel behind the ledge
+    expect(h(WILD.x1) / h(WILD.x0)).toBeGreaterThan(0.72);
+    expect(wildBottom(lerp(WILD.x0, WILD.x1, 0.6))).toBeCloseTo(wildBottom(WILD.x0), 6); // level along most of it
+    expect(wildBottom(WILD.x1) - wildBottom(WILD.x0)).toBeGreaterThan(0.3); // a short chamfer at the rear
+    expect(wildBottom(WILD.x1) - podBottom(WILD.x1)).toBeGreaterThan(0.25); // still on the pod
+  });
+
   it('runs the ledge out ahead of the WILD ROAD panel, whose lower edge rises in a straight diagonal behind it', () => {
     const insetAt = (x: number) => interpStations(POD_ST, x)[3];
     expect(insetAt(LEDGE_END)).toBe(0);
     expect(insetAt(LEDGE_END + 0.5)).toBeGreaterThan(0.2);
-    // photo 12: from about (-1.9, 3.7) up to (-4.7, 5.7), following the rear tyre
+    // photo 12: level under most of the WILD ROAD frame, then up to about (-4.7, 5.6), following the rear tyre
     expect(podBottom(POD.cutX)).toBeCloseTo(POD.bottom, 6);
     expect(podBottom(SIDE_POD.rearX)).toBeGreaterThan(5.4);
     const mid = (POD.cutX + SIDE_POD.rearX) / 2;

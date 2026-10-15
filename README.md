@@ -2,7 +2,7 @@
 
 An interactive 3D model of a toy RC buggy, made as a backdrop for a grown-up and a child talking about the real car on the table. You point the model at a part, it flies there and shows that part working, and the notes give the grown-up something to ask, the answer, and something to try on the real car.
 
-**Live site:** https://harell.github.io/buggy/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
+**Live site:** https://harell.github.io/buggy-emulator/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
 
 The car is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), shown in blue with its "SHUTTLE 08" and "WILD ROAD" decals. It has rear-wheel drive, a 2.4 GHz radio with on/off throttle and steering, one 3.7 V 14500 lithium-ion cell, and painted metal panels on a black plastic frame.
 
@@ -66,7 +66,7 @@ Two GitHub Actions workflows live in `.github/workflows/`:
 
 1. In the repo, go to **Settings → Pages**.
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Merge a PR into `main` (or run *Deploy to GitHub Pages* from the Actions tab). The site goes live at https://harell.github.io/buggy/.
+3. Merge a PR into `main` (or run *Deploy to GitHub Pages* from the Actions tab). The site goes live at https://harell.github.io/buggy-emulator/.
 
 Recommended: in **Settings → Branches**, protect `main` so that it requires a pull request and the **CI / Typecheck, test and build** check before merging.
 

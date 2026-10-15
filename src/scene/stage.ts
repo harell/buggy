@@ -12,6 +12,8 @@ export interface Stage {
   /** Narrow screens need the camera further back. */
   fitK(): number;
   resize(w: number, h: number): void;
+  /** Slide the picture left by this many pixels, so what the camera looks at sits clear of a panel on the right. */
+  setShift(px: number): void;
   /** Keep the shadow-casting light over whatever the camera looks at. */
   followTarget(): void;
 }
@@ -50,9 +52,15 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   const rim = new THREE.DirectionalLight(0xc4d8ff, 0.7); rim.position.set(-22, 14, -20); scene.add(rim);
 
   const fitK = () => Math.max(1, 1.35 / camera.aspect);
+  let size = { w: 1, h: 1 }, shift = 0;
+  const applyShift = () => {
+    if (Math.abs(shift) < 0.5) camera.clearViewOffset();
+    else camera.setViewOffset(size.w, size.h, shift, 0, size.w, size.h);
+  };
   return {
     renderer, scene, camera, controls, sun, home, fitK,
-    resize(w, h) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); },
+    resize(w, h) { size = { w, h }; renderer.setSize(w, h, false); camera.aspect = w / h; applyShift(); camera.updateProjectionMatrix(); },
+    setShift(px) { if (Math.abs(px - shift) < 0.25) return; shift = px; applyShift(); camera.updateProjectionMatrix(); },
     followTarget() {
       const t = controls.target;
       sun.position.set(t.x + 16, 34, t.z + 12); sun.target.position.set(t.x, 0, t.z);

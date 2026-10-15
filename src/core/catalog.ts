@@ -3,6 +3,9 @@ import { DRIVE_TEETH, RATIO } from './gears';
 
 export type PartKey = 'motor' | 'gears' | 'battery' | 'board' | 'steering' | 'suspension' | 'wheels' | 'lights' | 'wires' | 'chassis' | 'body';
 
+/** The wire runs in the car: battery leads, drive motor, steering motor, light bar. */
+export type Circuit = 'batt' | 'drive' | 'steer' | 'light';
+
 export interface PartInfo { chip: string; title: string; color: string; kid: string; adult: string }
 
 export const PART_ORDER: readonly PartKey[] = ['motor', 'gears', 'battery', 'board', 'steering', 'suspension', 'wheels', 'lights', 'wires', 'chassis', 'body'];
@@ -17,14 +20,14 @@ const T = DRIVE_TEETH;
 /* Kid text is read aloud to a young child. Grown-up text says what is known about the real DK087 and what is drawn as an example. */
 export const PART_INFO: Record<PartKey, PartInfo> = {
   motor: {
-    chip: 'Engine', title: 'Motor (the engine)', color: '#c9ced6',
+    chip: 'Motor', title: 'Motor', color: '#c9ced6',
     kid: 'Electricity from the battery makes the motor spin super fast. Whirrr! It lies sideways between the back wheels, just behind the axle, and makes the car go.',
-    adult: 'A small brushed DC can motor, 130 or 180 size (about 15–16 mm across; the exact type is not known). It lies across the car in the right-hand end of the rear gearbox, behind the rear axle, and slides out once the end cap is off. The housing is solid black, so you only see the motor here while Engine is picked or when you take the car apart. Inside the can are two magnets, and the commutator keeps switching current through the spinning coils so the rotor keeps turning. Swap + and − and it spins the other way. That is all reverse is.',
+    adult: 'A small brushed DC can motor, 130 or 180 size (about 15–16 mm across; the exact type is not known). It lies across the car in the right-hand end of the rear gearbox, behind the rear axle, and slides out once the end cap is off. The housing is solid black, so you only see the motor here while the Motor is in focus or when you take the car apart. Inside the can are two magnets, and the commutator keeps switching current through the spinning coils so the rotor keeps turning. Swap + and − and it spins the other way. That is all reverse is.',
   },
   gears: {
     chip: 'Gears', title: 'Gearbox', color: '#efe6cf',
     kid: 'Gears are wheels with teeth. The tiny gear on the motor turns a big gear, and that turns the back wheels. Small gear: fast. Big gear: slow but strong.',
-    adult: `The real gears sit inside the black rear gearbox and have never been photographed, so the tooth counts here are illustrative: ${T.pinion} → ${T.g1Big}, then ${T.g1Small} → ${T.final} on the axle, about ${+RATIO.toFixed(1)} : 1 (toy gearboxes are usually 10–30 : 1). Only the rear wheels are driven (2WD), on a solid axle; one buyer says there is no differential. The real housing is solid black and hides them; it opens up here while Gears or Engine is picked, and you can also take the car apart to watch them.`,
+    adult: `The real gears sit inside the black rear gearbox and have never been photographed, so the tooth counts here are illustrative: ${T.pinion} → ${T.g1Big}, then ${T.g1Small} → ${T.final} on the axle, about ${+RATIO.toFixed(1)} : 1 (toy gearboxes are usually 10–30 : 1). Only the rear wheels are driven (2WD), on a solid axle; one buyer says there is no differential. The real housing is solid black and hides them; it opens up here while the Gears or the Motor are in focus, and you can also take the car apart to watch them.`,
   },
   battery: {
     chip: 'Battery', title: 'Battery', color: '#2f7fd6',

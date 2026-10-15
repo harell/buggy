@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { PartKey } from '../core/catalog';
+import type { Circuit, PartKey } from '../core/catalog';
 import { BATTERY, BUMPER, CHASSIS, HOOD, LIGHT_BAR, R, RING_R, ROOF, SHOCK, SIDE_POD, TYRE_W, TZF, TZR, WING, XF, XR, type Corner } from '../core/dims';
 import { AXLE, DRIVE_TEETH, G1, MODULE, MOTOR, STEER_ARM, STEER_MODULE, STEER_TEETH } from '../core/gears';
 import { lerp, rng, TAU } from '../core/math';
 import {
   armGeo, box, cylX, cylZ, DOWN, extrudeTop, extrudeXY, facingGlow, gearGeo, interpStations, panelGeo, put, RIM_SPOKES, rimShape, ringGeo, roundRectPts, springGeo, tube, tyreGeo, UP, V, type P2,
 } from './geometry';
-import { MAT, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
+import { MAT, markWire, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
 import {
   B_PILLAR, FRONT_PANEL, GUARD, WING_CENTRE, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, hoodSection, surfHood, FRONT_PIVOT, POD, POD_ST, podBottom, WILD, wildBottom, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
   type Perforated,
@@ -18,7 +18,7 @@ export interface Wheel { outer: Piece; spin: THREE.Group; side: -1 | 1; front: b
 export interface Shock { group: Piece; update(top: THREE.Vector3, bottom: THREE.Vector3): void }
 export interface TieRod { group: Piece; ends: PartMesh[] }
 export interface Arm { side: -1 | 1; lower: Piece }
-export type Circuit = 'batt' | 'drive' | 'steer' | 'light';
+export type { Circuit };
 export interface Wire { mesh: PartMesh; tex: THREE.Texture; circuit: Circuit; dir: 1 | -1 }
 
 export interface Car {
@@ -584,7 +584,7 @@ export function buildCar(scene: THREE.Scene): Car {
   const axle = put(mk(cylZ(0.15, 2 * TZR - 1.8, 14), MAT.steel, 'gears'), AXLE.x, AXLE.y, 0);
   pAxle.add(fg, axle);
   {
-    // one solid satin-black housing with a seam on the centre line (issue #10); it opens up while Engine or Gears is picked
+    // one solid satin-black housing with a seam on the centre line (issue #10); it opens up while the Motor or the Gears are in focus
     const g = (geo: THREE.BufferGeometry, mat: () => StdMat = M.plastic, o = {}) => pGearCase.add(mk(geo, mat, 'gears', o));
     const OPEN = { cutaway: ['gears', 'motor'] } as const;
     g(extrudeXY(GEARBOX_OUTLINE, 2.1, 0.06), M.housing, OPEN);
@@ -644,7 +644,7 @@ export function buildCar(scene: THREE.Scene): Car {
   const wire = (pts: [number, number, number][], mat: () => THREE.MeshStandardMaterial, circuit: Circuit, dir: 1 | -1, r = 0.065, parent: Piece = pWires) => {
     const tex = flowTex.clone(); tex.needsUpdate = true; tex.repeat.set(6, 1);
     const mesh = mk(tube(v3(pts), r, 60, 6), () => { const mt = mat(); mt.emissive = new THREE.Color(0xffd27a); mt.emissiveMap = tex; mt.emissiveIntensity = 0; return mt; }, 'wires', { cast: false });
-    parent.add(mesh); wires.push({ mesh, tex, circuit, dir });
+    markWire(mesh, circuit); parent.add(mesh); wires.push({ mesh, tex, circuit, dir });
   };
   // battery: from the plug's mate up through the bay floor to the board
   for (const [dz, m, dir] of [[0.08, MAT.redWire, 1], [-0.08, MAT.blackWire, -1]] as const)

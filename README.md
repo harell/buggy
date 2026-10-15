@@ -1,6 +1,6 @@
-# Shuttle 08 Workshop
+# Shuttle 08 Teardown
 
-An interactive 3D model of a toy RC buggy, made as a backdrop for a grown-up and a child talking about the real car on the table. You point the model at a part, it flies there and shows that part working, and the notes give the grown-up something to ask, the answer, and something to try on the real car.
+An interactive 3D teardown of a toy RC buggy. The car drives on rough ground the whole time, and you choose what to show: light up any component or set of components, take parts off the car, or pull the whole car apart. It is meant to replace a screwdriver when you want to show someone how the car is built and how its parts work together, in whatever order the conversation goes.
 
 **Live site:** https://harell.github.io/buggy/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
 
@@ -8,20 +8,15 @@ The car is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), shown in b
 
 ## What you can do
 
-The car always sits on the bumpy dirt track and fills the window; everything else floats over it at the edges.
+There are no keyboard shortcuts and no script: every control is on screen.
 
 | Area | How it works |
 | --- | --- |
-| Point and look | Dots on the whole car mark Battery, Brain, Motor, Gears, Steering and Springs. Click one (or a part in 3D, or press 1–7) and the camera flies there. That part is solid and the rest of the car turns see-through. A motor keeps its battery, brain and its own wires solid too, so you always see where its energy comes from; the gears and springs are shown on their own, because they would work the same without electronics. PgDn / PgUp step along the chain, Esc backs out. |
-| Notes (top right) | For the grown-up: a one-line gist, a question to ask, the answer (hidden until you press A), something to try on the real car, a what-if button (W), and "About the real car" with what is known about the DK087. H folds the card. While the card is open the picture slides left so the part sits clear of it. |
-| What-ifs | Take it apart, Switch off, Remote off, Run it backwards, Slow motion, Hold full lock (the steering motor stalls and its wires keep glowing), Lock the springs. |
-| Questions (Q) | What children ask, in their words ("What if the battery is flat?"). Each sets up the right view, puts the question at the top of the notes with a short answer, and switches on its what-if. Asked questions get a tick. |
-| Walks (G) | Go, Turn and Bounce: guided steps along one chain, for a presentation clicker. Each press shows the question, then the answer, then moves on; the last step runs the whole chain while the steps light up. 1–7 jump off the walk, Backspace comes back. |
-| Child view (N) | Hides the notes and shows one large line: the question to think about. |
-| Remote (bottom right) | Drag its wheel to steer and hold its trigger to drive (push it away to reverse); its **+** button switches the lights. The arrow keys drive too. The run button and the space bar run whatever is in focus (drive, power the motor, turn left). |
-
-Keyboard: 1–7 parts, PgDn/PgUp along the chain, Esc back, Space run, arrows drive, Q questions, G walks, W what-if, A answer, H fold notes, N child view, E take apart, L lights. The Keys button lists them.
-
+| Parts (left) | Twenty components in five sets: body and frame, suspension, drivetrain, steering and electrics. Click a name to light it up: it stays solid and everything else turns see-through. Click more names to light up several, or click a set's heading to light up the whole set. The eye takes a component (or a whole set) off the car, and clicking it again puts it back. A covered part opens its cover when it is lit up: the gearbox for the gears and motor, the motor can for its rotor, the tub lid for the receiver. Hover a name for one line of facts. **Reset** puts everything back. Clicking a part in 3D, or its name tag, lights it up or turns it off. |
+| Viewpoints (top right) | 3/4, Side, Front, Rear and Top. Side is low, at wheel height: the view for watching the shocks against the frame. The camera frames whatever is lit up, and you can drag to orbit and scroll to zoom. |
+| Motion (bottom) | **Driving** (on from the start): the car drives forward by itself. **Weave** steers full left and right in turn, so the steering works. **Rough ground** switches between gravel and a smooth track. **Springs locked** bolts the body to the wheels, for comparing with working springs on the same ground. **Slow-mo** slows everything down. **Ride trace** graphs the front-left wheel's bumps against the body above it. |
+| Together ↔ Apart | Spreads the parts out into an exploded view. While the car is apart it sits on a stand: the wheels, motor and gears keep turning, but the springs rest. |
+| Springs | Each spring glows orange as it is squeezed, while the shocks are shown solid. |
 ## Development
 
 Built with TypeScript, [Three.js](https://threejs.org/) (from npm), [Vite](https://vitejs.dev/) and [Vitest](https://vitest.dev/). Needs Node 20 or newer.
@@ -43,10 +38,10 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 
 | Folder | What lives there | Tested |
 | --- | --- | --- |
-| `src/core/` | Pure logic: dimensions, terrain height field, controls, driving model, suspension, gear and rack kinematics, label layout, part catalogue, the lesson layer (what each focus shows, the questions, the walks and how they step) | Yes, `tests/*.test.ts` |
-| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (focus and ghosting, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
-| `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the part clear of the notes), the moving ground, the remote, radio rings, posing the car each frame | The remote's builder (`tests/remote.test.ts`); the rest visually |
-| `src/ui/` | DOM pieces: part tags and hotspots, the notes, questions, walk and caption markup, sound | Visually |
+| `src/core/` | Pure logic: dimensions, terrain height field, driving model, suspension, gear and rack kinematics, ride meter, label layout, parts and the bench's components and sets (`components.ts`) | Yes, `tests/*.test.ts` |
+| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (which component each mesh belongs to, lighting up, removing, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
+| `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the car clear of the parts panel), the moving ground, posing the car each frame (including the spring glow) | Visually |
+| `src/ui/` | DOM pieces: name tags and the ride trace | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |
 
 New behaviour starts as a failing test in `tests/`, then the code that makes it pass.

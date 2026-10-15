@@ -5,7 +5,7 @@ import { driveAngles, rackTravel, steerGearAngles } from '../core/gears';
 import type { Body, CornerBumps } from '../core/suspension';
 import type { DriveState } from '../core/vehicle';
 import { link, UP, V } from '../model/geometry';
-import { exOf, PARTS } from '../model/parts';
+import { compRemoved, exOf, PARTS } from '../model/parts';
 import type { Car } from '../model/car';
 import { FRONT_PIVOT, FRONT_SHOCK_LOW, FRONT_SHOCK_TOP, KNUCKLE_INSET, kingpinSwing, RACK_END, REAR_SHOCK_LOW, REAR_SHOCK_TOP, STEER_ARM_END, swingFor } from '../model/mounts';
 
@@ -23,10 +23,15 @@ export interface PoseInput {
   ledGlows: boolean;
   /** The steering the remote asks for, -1..1: at full lock the stalled motor still draws current. */
   steerHeld: number;
+  /** Tint the springs by how hard they are squeezed. */
+  springTint: boolean;
   dt: number;
 }
 
 const invSprung = new THREE.Matrix4();
+const WARM = new THREE.Color(0xff6a10);
+/** Each shock's length at ride height, followed slowly so front and rear find their own; this much shorter reads as fully squeezed (cm). */
+const rest = new WeakMap<object, number>(), SQUEEZE = 0.7;
 const toSprung = (p: THREE.Vector3) => p.clone().applyMatrix4(invSprung);
 
 /** Place every moving part of the car for this frame. */
@@ -104,7 +109,7 @@ export function poseCar(car: Car, k: PoseInput): void {
   const steerAct = k.steerHeld !== 0 ? 1 : Math.min(1, Math.abs(drive.steerVel) * 2), power = Math.abs(drive.throttle);
   const steerDir = k.steerHeld !== 0 ? Math.sign(k.steerHeld) : Math.sign(drive.steerVel);
   for (const w of car.wires) {
-    w.mesh.visible = wiresShown(k.explodeRaw);
+    w.mesh.visible = wiresShown(k.explodeRaw) && !compRemoved('wires') && !(w.circuit === 'light' && compRemoved('lightBar')); // no lead to nowhere
     let level = 0, speed = 0;
     if (w.circuit === 'batt') { level = Math.min(1, power + steerAct * 0.6 + (k.lights ? 0.15 : 0)); speed = level * w.dir; }
     else if (w.circuit === 'drive') { level = power; speed = Math.sign(drive.throttle) * power * w.dir; }
@@ -118,4 +123,12 @@ export function poseCar(car: Car, k: PoseInput): void {
   for (const m of car.leds) m.userData.mat.emissiveIntensity = k.lights ? 2.2 : 0;
   for (const s of car.ledGlows) s.visible = k.lights && k.ledGlows;
   car.headlight.intensity = k.lights && !k.onStand ? 3.2 : 0;
+
+  // springs warm up as they are squeezed
+  for (const sh of Object.values(car.shocks)) {
+    const r = (rest.get(sh) ?? sh.length) + (sh.length - (rest.get(sh) ?? sh.length)) * Math.min(1, k.dt * 0.4);
+    rest.set(sh, r);
+    const m = sh.spring.userData.mat, squeeze = Math.max(0, Math.min(1, (r - sh.length) / SQUEEZE));
+    m.emissive.copy(WARM); m.emissiveIntensity = k.springTint ? squeeze * 0.9 : 0;
+  }
 }

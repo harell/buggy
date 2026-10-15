@@ -26,8 +26,11 @@ export class LabelLayer {
     }
   }
 
-  setSelected(sel: PartKey | null): void {
-    for (const k of PART_ORDER) this.labels[k].el.classList.toggle('sel', k === sel);
+  setSelected(sel: PartKey | null, seen: ReadonlySet<PartKey> = new Set()): void {
+    for (const k of PART_ORDER) {
+      this.labels[k].el.classList.toggle('sel', k === sel);
+      this.labels[k].el.classList.toggle('seen', k !== sel && seen.has(k));
+    }
   }
 
   /** Call after the car is posed for the first time. */
@@ -53,7 +56,8 @@ export class LabelLayer {
     };
   }
 
-  update(car: Car, camera: THREE.Camera, w: number, h: number, showAll: boolean, selected: PartKey | null, dt: number): void {
+  /** `shown` says which tags to draw: all of them while the car is apart, the hotspots on the whole car, else none. */
+  update(car: Car, camera: THREE.Camera, w: number, h: number, shown: (k: PartKey) => boolean, selected: PartKey | null, dt: number): void {
     this.anchors ??= this.buildAnchors(car);
     const smooth = 1 - Math.exp(-dt * 14);
     const order = selected ? [selected, ...PART_ORDER.filter((k) => k !== selected)] : PART_ORDER;
@@ -61,7 +65,7 @@ export class LabelLayer {
     for (const k of order) {
       const L = this.labels[k], A = this.anchors[k];
       const hide = () => { L.el.hidden = true; L.live = false; };
-      if (!(showAll || k === selected) || !isShown(A.obj) || !A.visible()) { hide(); continue; }
+      if (!shown(k) || !isShown(A.obj) || !A.visible()) { hide(); continue; }
       const p = A.obj.localToWorld(A.local.clone()).project(camera);
       if (p.z > 1) { hide(); continue; }
       const tx = ((p.x + 1) / 2) * w, ty = ((1 - p.y) / 2) * h;

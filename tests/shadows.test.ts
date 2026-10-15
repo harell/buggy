@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { applyHighlight, GHOST, GHOST_NEAR, markWireEnds, mk, quietShadows, setApart } from '../src/model/parts';
+import { applyFocus, applyHighlight, GHOST, markWire, mk, quietShadows, setApart } from '../src/model/parts';
 
 const grey = () => new THREE.MeshStandardMaterial({ color: 0x777777 });
 const cube = (s: number) => new THREE.BoxGeometry(s, s, s);
@@ -78,35 +78,35 @@ describe('shadow casters', () => {
   });
 });
 
-describe('ghosting while Wires is picked', () => {
-  it('ghosts the parts the wires end at more lightly, so no wire ends in mid-air', () => {
-    const battery = mk(cube(2), grey, 'battery'), shell = mk(cube(2), grey, 'body');
-    const wire = mk(new THREE.CylinderGeometry(0.06, 0.06, 5), grey, 'wires', { cast: false });
-    const ends = new THREE.Group(); ends.add(battery);
-    markWireEnds([ends]);
-    applyHighlight('wires');
-    expect(wire.material).toBe(wire.userData.mat);
-    expect(battery.material).toBe(GHOST_NEAR);
+describe('focusing on a chain', () => {
+  it('keeps a motor\u2019s loop solid: its battery and its own wires, not the other circuits', () => {
+    const battery = mk(cube(2), grey, 'battery'), shell = mk(cube(2), grey, 'body'), motor = mk(cube(1), grey, 'motor');
+    const batt = mk(new THREE.CylinderGeometry(0.06, 0.06, 5), grey, 'wires', { cast: false });
+    const drive = mk(new THREE.CylinderGeometry(0.06, 0.06, 5), grey, 'wires', { cast: false });
+    const steer = mk(new THREE.CylinderGeometry(0.06, 0.06, 5), grey, 'wires', { cast: false });
+    markWire(batt, 'batt'); markWire(drive, 'drive'); markWire(steer, 'steer');
+    applyFocus({ parts: ['motor', 'battery', 'wires'], circuits: ['batt', 'drive'], open: ['motor'] });
+    for (const m of [battery, motor, batt, drive]) expect(m.material).toBe(m.userData.mat);
+    expect(steer.material).toBe(GHOST);
     expect(shell.material).toBe(GHOST);
-    expect(GHOST_NEAR.opacity).toBeGreaterThanOrEqual(0.2);
-    expect(GHOST_NEAR.opacity).toBeLessThanOrEqual(0.3);
-    applyHighlight('board'); // any other part: the usual faint ghost
-    expect(battery.material).toBe(GHOST);
-    applyHighlight(null);
-    expect(battery.material).toBe(battery.userData.mat);
+    applyFocus(null);
+    for (const m of [battery, shell, motor, batt, drive, steer]) expect(m.material).toBe(m.userData.mat);
   });
 
-  it('ghosts a wire end that is also a cover lightly, and keeps the cover shut underneath', () => {
+  it('ghosts the rest faintly but readably', () => {
+    expect(GHOST.opacity).toBeGreaterThanOrEqual(0.1);
+    expect(GHOST.opacity).toBeLessThanOrEqual(0.2);
+    expect(GHOST.depthWrite).toBe(false);
+  });
+
+  it('opens a cover only when the focus asks for it, even if its part is solid', () => {
     const can = mk(cube(2), grey, 'motor', { cutaway: ['motor', 'gears'] });
-    const ends = new THREE.Group(); ends.add(can);
-    markWireEnds([ends]);
-    applyHighlight('motor');
-    expect(can.userData.mat.transparent).toBe(true);
-    applyHighlight('wires');
-    expect(can.material).toBe(GHOST_NEAR);
-    expect(can.userData.mat.transparent).toBe(false);
-    expect(can.userData.mat.opacity).toBe(1);
-    applyHighlight(null);
+    applyFocus({ parts: ['motor', 'gears'], circuits: [], open: ['gears'] });
     expect(can.material).toBe(can.userData.mat);
+    expect(can.userData.mat.transparent).toBe(true);
+    applyFocus({ parts: ['motor'], circuits: [], open: [] });
+    expect(can.userData.mat.transparent).toBe(false);
+    expect(can.castShadow).toBe(true);
+    applyFocus(null);
   });
 });

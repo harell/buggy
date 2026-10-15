@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import type { PartKey } from '../core/catalog';
 import { wiresShown } from '../core/pick';
 import { CORNERS, R, TZ, TZR, XR } from '../core/dims';
 import { driveAngles, rackTravel, steerGearAngles } from '../core/gears';
@@ -20,7 +19,10 @@ export interface PoseInput {
   explodeRaw: number;
   onStand: boolean;
   lights: boolean;
-  selected: PartKey | null;
+  /** Whether the light bar's glow sprites show (off while the lights are ghosted). */
+  ledGlows: boolean;
+  /** The steering the remote asks for, -1..1: at full lock the stalled motor still draws current. */
+  steerHeld: number;
   dt: number;
 }
 
@@ -98,21 +100,22 @@ export function poseCar(car: Car, k: PoseInput): void {
   car.steerGears.motor.rotation.y = sg.motor;
 
   // wires: a glow travels along each wire carrying current
-  const steerAct = Math.min(1, Math.abs(drive.steerVel) * 2), power = Math.abs(drive.throttle);
+  // the steering motor draws current while it is asked to turn, moving or stalled at full lock
+  const steerAct = k.steerHeld !== 0 ? 1 : Math.min(1, Math.abs(drive.steerVel) * 2), power = Math.abs(drive.throttle);
+  const steerDir = k.steerHeld !== 0 ? Math.sign(k.steerHeld) : Math.sign(drive.steerVel);
   for (const w of car.wires) {
     w.mesh.visible = wiresShown(k.explodeRaw);
     let level = 0, speed = 0;
     if (w.circuit === 'batt') { level = Math.min(1, power + steerAct * 0.6 + (k.lights ? 0.15 : 0)); speed = level * w.dir; }
     else if (w.circuit === 'drive') { level = power; speed = Math.sign(drive.throttle) * power * w.dir; }
-    else if (w.circuit === 'steer') { level = steerAct; speed = Math.sign(drive.steerVel) * steerAct * w.dir; }
+    else if (w.circuit === 'steer') { level = steerAct; speed = steerDir * steerAct * w.dir; }
     else { level = k.lights ? 0.5 : 0; speed = level; }
     w.tex.offset.x -= speed * k.dt * 6;
-    if (k.selected === 'wires' && level < 0.35) level = 0.35; // keep them visible while looking at them
     w.mesh.userData.mat.emissiveIntensity = level * 1.8;
   }
 
   // lights
   for (const m of car.leds) m.userData.mat.emissiveIntensity = k.lights ? 2.2 : 0;
-  for (const s of car.ledGlows) s.visible = k.lights && !(k.selected && k.selected !== 'lights');
+  for (const s of car.ledGlows) s.visible = k.lights && k.ledGlows;
   car.headlight.intensity = k.lights && !k.onStand ? 3.2 : 0;
 }

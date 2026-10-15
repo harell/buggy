@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { PART_INFO, PART_ORDER, type PartInfo, type PartKey } from '../core/catalog';
+import { PART_INFO, PART_ORDER, type Circuit, type PartInfo, type PartKey } from '../core/catalog';
+import type { Cast } from '../core/lesson';
 
 export type StdMat = THREE.MeshStandardMaterial;
 type MatSource = StdMat | (() => StdMat);
@@ -45,21 +46,27 @@ export const MAT = {
   blueWire: std({ color: 0x2a64d6, roughness: 0.45 }),
 } satisfies Record<string, () => StdMat>;
 
-/** Shared see-through material for everything except the part being looked at. */
-export const GHOST = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.055, depthWrite: false });
-/** A stronger ghost for the parts the wires end at while Wires is picked, so every wire visibly lands somewhere. */
-export const GHOST_NEAR = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.25, depthWrite: false });
-const wireEnds = new WeakSet<THREE.Object3D>();
+/** Shared see-through material for everything outside the focus: faint, but enough to keep the car's shape. */
+export const GHOST = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.13, depthWrite: false });
+/** The circuit each wire belongs to, so a focus can keep just its own loop solid. */
+const wireCircuit = new WeakMap<THREE.Object3D, Circuit>();
 
 /** Meshes that never cast a shadow: made with cast: false, or too small for theirs to show. */
 const noShadow = new WeakSet<THREE.Object3D>();
-/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or a part is picked. */
+/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or a part is in focus. */
 const shutIn = new WeakSet<THREE.Object3D>();
-let apart = false, lit: PartKey | null = null;
-/** A cover opened up for the picked part: see-through, so it casts no shadow onto what it shows. */
-const cutOpen = (m: PartMesh) => lit !== null && !!m.userData.cutaway?.includes(lit);
-// with a part picked, everything else is ghosted and its own covers are open, so what is shut inside shows
-const casts = (m: PartMesh) => (!lit || m.userData.part === lit) && !noShadow.has(m) && !cutOpen(m) && (apart || lit !== null || !shutIn.has(m));
+let apart = false, focus: Cast | null = null;
+/** Whether a mesh is drawn solid under the current focus (everything is, without one). */
+const inFocus = (m: PartMesh) => {
+  if (!focus) return true;
+  if (!focus.parts.includes(m.userData.part)) return false;
+  const c = wireCircuit.get(m);
+  return !c || focus.circuits.includes(c);
+};
+/** A cover opened up for the focus: see-through, so it casts no shadow onto what it shows. */
+const cutOpen = (m: PartMesh) => focus !== null && !!m.userData.cutaway?.some((k) => focus!.open.includes(k));
+// with a focus, everything else is ghosted and the focus's covers are open, so what is shut inside shows
+const casts = (m: PartMesh) => inFocus(m) && !noShadow.has(m) && !cutOpen(m) && (apart || focus !== null || !shutIn.has(m));
 
 export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean }
 
@@ -94,12 +101,12 @@ export function recordBases(): void {
 
 export const exOf = (o: Piece, e: number): THREE.Vector3 => o.userData.ex.clone().multiplyScalar(e);
 
-/** Show one part (or everything when null): ghost the rest, open its cutaways, reset glows. */
-export function applyHighlight(k: PartKey | null): void {
-  lit = k;
-  for (const p of Object.values(PARTS)) for (const m of p.meshes) {
-    const meta = m.userData, base = meta.mat, on = !k || p.key === k;
-    m.material = on ? base : k === 'wires' && wireEnds.has(m) ? GHOST_NEAR : GHOST;
+/** Draw the cast solid (or everything when null): ghost the rest, open its covers, reset glows. */
+export function applyFocus(cast: Cast | null): void {
+  focus = cast;
+  for (const m of allMeshes) {
+    const meta = m.userData, base = meta.mat, on = inFocus(m);
+    m.material = on ? base : GHOST;
     m.castShadow = casts(m);
     if (meta.cutaway) {
       const cut = cutOpen(m);
@@ -111,6 +118,12 @@ export function applyHighlight(k: PartKey | null): void {
     if (!meta.isLed) { base.emissive.copy(meta.em0); base.emissiveIntensity = meta.emI0; }
   }
 }
+
+/** Focus one part on its own, with its covers open (or the whole car when null). */
+export const applyHighlight = (k: PartKey | null): void => applyFocus(k ? { parts: [k], circuits: ['batt', 'drive', 'steer', 'light'], open: [k] } : null);
+
+/** Remember which circuit a wire belongs to (call as each wire is made). */
+export function markWire(mesh: THREE.Object3D, circuit: Circuit): void { wireCircuit.set(mesh, circuit); }
 
 /**
  * Stop meshes casting shadows nobody would see (call once the car is built): any whose world bounding radius is
@@ -132,11 +145,6 @@ export function setApart(a: boolean): void {
   if (a === apart) return;
   apart = a;
   for (const m of allMeshes) if (shutIn.has(m)) m.castShadow = casts(m);
-}
-
-/** The objects the wires end at (battery, board, motors, light bar): ghosted lightly while Wires is picked. */
-export function markWireEnds(objs: readonly THREE.Object3D[]): void {
-  for (const o of objs) o.traverse((m) => { if ((m as PartMesh).isMesh) wireEnds.add(m); });
 }
 
 const GLOW = new THREE.Color(0xff7a12);

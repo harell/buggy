@@ -1,17 +1,18 @@
 import './styles.css';
 import * as THREE from 'three';
-import { PART_ORDER, SLOW_PARTS, type PartKey } from './core/catalog';
+import { SLOW_PARTS, type PartKey } from './core/catalog';
 import { Controls, type Action } from './core/controls';
-import { bodyHeightAt, createBody, stepSuspension, type CornerBumps } from './core/suspension';
-import { CORNERS, TZ, XF } from './core/dims';
-import { activeFlows } from './core/flow';
-import { explodeAfterPick, pickAfterExplode, wiresShown } from './core/pick';
+import { createBody, stepSuspension, type CornerBumps } from './core/suspension';
+import { CORNERS } from './core/dims';
+import {
+  FOCUS, FOCUS_ORDER, focusOfPart, isAllTogether, QUESTIONS, stepFocus, WALK_START, walkNext, walkPrev, WALKS,
+  type Cast, type FocusKey, type Question, type RunAction, type WalkKey, type WalkPos, type WhatIfId,
+} from './core/lesson';
 import { clamp, ease, frameStep, lerp } from './core/math';
-import { RideMeter } from './core/ride';
 import { groundHeight } from './core/terrain';
 import { createDrive, stepDrive, wheelWorld } from './core/vehicle';
 import { ANT_TIP, buildCar } from './model/car';
-import { allMeshes, applyHighlight, GHOST, GHOST_NEAR, isShown, markWireEnds, PARTS, pulseHighlight, quietShadows, setApart } from './model/parts';
+import { allMeshes, applyFocus, GHOST, isShown, PARTS, pulseHighlight, quietShadows, setApart } from './model/parts';
 import { poseCar } from './scene/carMotion';
 import { createGround } from './scene/ground';
 import { createRemote, ctrlOf, WHEEL_TURN } from './scene/remote';
@@ -19,9 +20,8 @@ import { RingPool } from './scene/rings';
 import { createStage, syncTheme, type Stage } from './scene/stage';
 import { MotorSound } from './ui/audio';
 import { $ } from './ui/dom';
-import { FlowStrip } from './ui/flowStrip';
 import { LabelLayer } from './ui/labels';
-import { RideGraph } from './ui/rideGraph';
+import { bigcapHTML, captionHTML, crumbsHTML, endHTML, notesHTML, questionsHTML, stepsHTML, walksHTML } from './ui/lessonView';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const bay = $('bay');
@@ -37,10 +37,10 @@ try {
 }
 const { scene, camera, controls: orbit } = stage;
 const ground = createGround(scene);
+ground.rough = true; ground.reshape(); // the bumpy track is always the backdrop
 const car = buildCar(scene);
 // shadows nobody would see: tiny parts, and what is shut inside the gearbox, the motor can, the steering box and the tub
 quietShadows(0.3, [car.pieces.gear1, car.driveGears.fg, car.driveGears.axle, car.pieces.motor, car.pieces.steerBox, car.pieces.board, car.pieces.battery]);
-markWireEnds([car.pieces.battery, car.pieces.board, car.pieces.motor, car.pieces.steerBox, car.pieces.lights]);
 const remote = createRemote(remoteCanvas);
 const carRings = new RingPool(scene, 0x4f8cff, 2.4);
 const remoteRings = new RingPool(remote.scene, 0x6aa0ff, 3.2);
@@ -49,14 +49,43 @@ const remoteRings = new RingPool(remote.scene, 0x6aa0ff, 3.2);
 const input = new Controls();
 const drive = createDrive();
 const body = createBody();
-const ride = new RideMeter();
 const sound = new MotorSound();
-const ui = { lights: true, slow: false, slowManual: false, locked: false, explodeT: 0, explode: 0, timeScale: 1, selected: null as PartKey | null, ringClock: 0 };
+const ui = {
+  lights: true, slow: false, slowManual: false, locked: false, explodeT: 0, explode: 0, timeScale: 1, ringClock: 0,
+  /** What the grown-up is pointing at, and how the notes look. */
+  focus: 'car' as FocusKey, question: null as Question | null, answer: false, whatIf: false, folded: false, child: false,
+  panel: null as 'questions' | 'walks' | 'keys' | null,
+  /** A guided walk, where each walk is up to, a part looked at off the walk, and whether the walk is running its part. */
+  walk: null as WalkKey | null, walkPos: { go: WALK_START, turn: WALK_START, bounce: WALK_START } as Record<WalkKey, WalkPos>,
+  offScript: null as FocusKey | null, walkRun: false, runClock: 0,
+  seen: new Set<FocusKey>(['car']), seenQ: new Set<Question>(),
+  shift: 0,
+};
 
 // Dev server only (stripped from production builds): lets scripted screenshots set the camera and state.
 if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, input, drive, stage, remote } });
 
-/* ---------------- selection & camera ---------------- */
+/* ---------------- what is on screen ---------------- */
+/** The focus the 3D view shows: the walk's step, a part looked at off the walk, or the free focus. 'all' is the walk's last step. */
+function viewFocus(): FocusKey | 'all' {
+  if (ui.walk && !ui.offScript) {
+    const w = WALKS[ui.walk], p = ui.walkPos[ui.walk];
+    return isAllTogether(w, p) ? 'all' : w.steps[p.step].focus;
+  }
+  return ui.offScript ?? ui.focus;
+}
+const castOf = (v: FocusKey | 'all'): Cast | null => (v === 'all' ? WALKS[ui.walk!].all.cast : FOCUS[v].cast);
+/** The what-if in effect: only the free focus has one switched on. */
+const activeWhatIf = () => (!ui.walk && ui.whatIf ? FOCUS[ui.focus].whatIf.id : null);
+/** Switched off or with the remote off, nothing the remote or the run button asks for reaches the motors. */
+const blocked = () => { const w = activeWhatIf(); return w === 'switchOff' || w === 'remoteOff'; };
+function runAction(): { action: RunAction; label: string } {
+  const v = viewFocus();
+  if (v === 'all') return { action: WALKS[ui.walk!].all.run, label: 'Run it all' };
+  return FOCUS[v].run;
+}
+
+/* ---------------- camera ---------------- */
 let camTween: { t: number; dur: number; fT: THREE.Vector3; tT: THREE.Vector3; fP: THREE.Vector3; tP: THREE.Vector3 } | null = null;
 orbit.addEventListener('start', () => { camTween = null; });
 const tweenTo = (target: THREE.Vector3, pos: THREE.Vector3) => {
@@ -71,132 +100,213 @@ function focusHome(e: number) {
   const t = new THREE.Vector3(0, 4.6 + e * 6, 0);
   tweenTo(t, t.clone().addScaledVector(viewDir(0.2, 0.35), lerp(48, 70, e) * stage.fitK()));
 }
-function focusPart(k: PartKey) {
+/** Frame some parts: the box round their visible meshes, seen from about where the camera already is. */
+function frameParts(keys: readonly PartKey[], tight = 1.9) {
   car.root.updateMatrixWorld(true);
   const b = new THREE.Box3();
-  // the wires are hidden while the car is apart and picking them puts it back together: frame them where they will be
-  const settling = k === 'wires' && !wiresShown(ui.explode);
-  for (const m of PARTS[k].meshes) if (m.visible || settling) b.expandByObject(m);
+  for (const k of keys) for (const m of PARTS[k].meshes) if (m.visible && isShown(m)) b.expandByObject(m);
   if (b.isEmpty()) return;
-  if (settling) b.translate(new THREE.Vector3(0, -car.root.position.y, 0)); // the car comes back down off its stand
   const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3()).length();
-  tweenTo(c, c.clone().addScaledVector(viewDir(0.25, 0.4), clamp(size * 1.9, 14, 80) * stage.fitK()));
+  tweenTo(c, c.clone().addScaledVector(viewDir(0.25, 0.4), clamp(size * tight, 14, 80) * stage.fitK()));
+}
+function frameView() {
+  const v = viewFocus();
+  if (v === 'all') { const c = castOf(v); if (c) frameParts(c.parts.filter((k) => k !== 'wires'), 2.2); else focusHome(ui.explodeT); return; }
+  const part = FOCUS[v].part;
+  if (part) frameParts([part]); else focusHome(ui.explodeT);
 }
 
-const labels = new LabelLayer($('labels'), (k) => select(k));
-const flow = new FlowStrip($('flow'), (k) => select(k));
-const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ride-feel'));
+/* ---------------- the what-ifs ---------------- */
+let whatIfHeld: Action | null = null, lastWhatIf: WhatIfId | null = null;
+/** Put the active what-if into effect, and undo the last one. */
+function applyWhatIf() {
+  const w = activeWhatIf();
+  if (whatIfHeld) { input.release(whatIfHeld, 'whatif'); whatIfHeld = null; }
+  const hold = w === 'reverse' ? 'back' : w === 'fullLock' ? 'left' : null;
+  if (hold) { sound.start(); input.press(hold, 'whatif'); whatIfHeld = hold; }
+  ui.locked = w === 'lockSprings';
+  if (w === 'apart') setExplode(1);
+  else if (lastWhatIf === 'apart') setExplode(0);
+  lastWhatIf = w;
+  autoSlow();
+}
+function autoSlow() {
+  if (ui.slowManual) return;
+  const v = viewFocus(), part = v === 'all' ? null : FOCUS[v].part;
+  ui.slow = activeWhatIf() === 'slow' || ui.explodeT > 0.05 || (!!part && SLOW_PARTS.includes(part));
+}
 
-function renderInfo() {
-  const el = $('info'), k = ui.selected;
-  if (!k) {
-    el.innerHTML = `<h3>Shuttle 08 off-road buggy</h3><p class="kid">Hold <b>Forward</b> to drive. Turn the wheel to steer. Tap any part of the car to look closer.</p><ul class="facts"><li>1:16 scale</li><li>2WD rear drive</li><li>2.4 GHz radio</li><li>up to 20 km/h (box)</li><li>3.7 V battery</li><li>20–30 min</li></ul><p class="adult"><b>For grown-ups</b>The model follows photos and measurements of the real DK087 (factory no. 3699-087). Parts nobody has photographed, such as the gear tooth counts, the steering box and the board layout, are drawn as illustrative examples.</p>`;
-    return;
+/* ---------------- changing what we look at ---------------- */
+function setFocus(k: FocusKey, q: Question | null = null) {
+  if (ui.walk) { ui.offScript = k === viewFocus() ? null : k; refresh(true); return; }
+  const changed = k !== ui.focus;
+  ui.focus = k; ui.question = q; ui.answer = false;
+  ui.whatIf = q ? q.whatIf : changed ? false : ui.whatIf;
+  ui.seen.add(k); if (q) ui.seenQ.add(q);
+  if (ui.panel === 'questions' && q) ui.panel = null;
+  applyWhatIf();
+  refresh(true);
+}
+function startWalk(k: WalkKey) {
+  if (ui.whatIf) { ui.whatIf = false; applyWhatIf(); }
+  if (ui.walkPos[k].end) ui.walkPos[k] = WALK_START;
+  ui.walk = k; ui.offScript = null; ui.panel = null; setWalkRun(false);
+  if (ui.explodeT > 0.05) setExplode(0);
+  refresh(true);
+}
+function endWalk() { setWalkRun(false); ui.walk = null; ui.offScript = null; ui.focus = 'car'; ui.question = null; refresh(true); }
+function walkStep(d: 1 | -1) {
+  const k = ui.walk!;
+  if (ui.offScript) { ui.offScript = null; refresh(true); return; }
+  const w = WALKS[k], before = ui.walkPos[k];
+  const next = d > 0 ? walkNext(w, before) : walkPrev(w, before);
+  if (next === 'nextWalk') { ui.walkPos[k] = WALK_START; startWalk(w.next); return; }
+  ui.walkPos[k] = next;
+  const moved = next.step !== before.step;
+  if (moved) setWalkRun(false);
+  refresh(moved);
+}
+function setWalkRun(on: boolean) {
+  for (const a of ['fwd', 'back', 'left'] as const) input.release(a, 'walk');
+  ui.walkRun = on; ui.runClock = 0;
+  if (on) { sound.start(); input.press(runAction().action, 'walk'); }
+}
+
+/** Bring the 3D view, the panels and the notes in line with the state. */
+function refresh(reframe: boolean) {
+  const v = viewFocus();
+  applyFocus(castOf(v));
+  autoSlow();
+  if (reframe) frameView();
+  bay.classList.toggle('child', ui.child);
+  // top left
+  $('b-questions').setAttribute('aria-expanded', String(ui.panel === 'questions'));
+  $('b-walk').setAttribute('aria-expanded', String(ui.panel === 'walks'));
+  $('b-keys').setAttribute('aria-expanded', String(ui.panel === 'keys'));
+  $('questions').hidden = ui.panel !== 'questions';
+  $('walks').hidden = ui.panel !== 'walks';
+  $('keys').hidden = ui.panel !== 'keys';
+  if (ui.panel === 'questions') $('questions').innerHTML = questionsHTML(ui.question, ui.seenQ);
+  const back = $('backchip');
+  back.innerHTML = ui.walk ? `<button class="backchip" data-act="${ui.offScript ? 'backtowalk' : 'endwalk'}">${ui.offScript ? `↩ Back to the ${WALKS[ui.walk].name} walk <kbd>⌫</kbd>` : `✕ Leave the ${WALKS[ui.walk].name} walk <kbd>Esc</kbd>`}</button>` : '';
+  // top centre
+  const walking = !!ui.walk;
+  $('crumbs').hidden = walking;
+  $('steps').hidden = !walking;
+  if (walking) $('steps').innerHTML = stepsHTML(ui.walk!, ui.walkPos[ui.walk!], !!ui.offScript, litSteps());
+  else $('crumbs').innerHTML = crumbsHTML(ui.focus);
+  // notes: the free focus, or the part looked at off the walk; a walk speaks through its caption
+  const notesFocus = walking ? ui.offScript : ui.focus;
+  const notes = $('notes');
+  notes.hidden = ui.child || !notesFocus;
+  notes.classList.toggle('folded', ui.folded);
+  if (notesFocus) notes.innerHTML = notesHTML({ focus: notesFocus, question: walking ? null : ui.question, answer: ui.answer, whatIf: !walking && ui.whatIf, folded: ui.folded, noWhatIf: walking });
+  // child view: one big line, the question to think about
+  $('bigcap').hidden = !ui.child || (walking && !ui.offScript);
+  if (ui.child) { const f = FOCUS[notesFocus ?? 'car']; $('bigcap').innerHTML = bigcapHTML(!walking && ui.question ? ui.question.text : f.ask, f.name); }
+  // the walk's caption and its end
+  const p = walking ? ui.walkPos[ui.walk!] : null;
+  $('caption').hidden = !walking || !!ui.offScript || !!p?.end;
+  $('endcard').hidden = !walking || !p?.end;
+  if (walking && p && !ui.offScript && !p.end) $('caption').innerHTML = captionHTML(ui.walk!, p, ui.walkRun, runAction().label);
+  if (walking && p?.end) $('endcard').innerHTML = endHTML(ui.walk!);
+  // run button and the 3D tags
+  $('b-run').textContent = `Hold · ${runAction().label}`;
+  const part = v === 'all' ? null : FOCUS[v].part;
+  labels.setSelected(part, new Set([...ui.seen].map((k) => FOCUS[k].part).filter((x): x is PartKey => !!x)));
+}
+const litSteps = () => (ui.walk && ui.walkRun && isAllTogether(WALKS[ui.walk], ui.walkPos[ui.walk]) ? Math.floor(ui.runClock * 1.6) % (WALKS[ui.walk].steps.length + 2) : -1);
+
+const HOT_PARTS = new Set<PartKey>(FOCUS_ORDER.map((k) => FOCUS[k].part).filter((x): x is PartKey => !!x));
+const labels = new LabelLayer($('labels'), (k) => { sound.start(); setFocus(focusOfPart(k)); });
+
+/* ---------------- panel and notes clicks ---------------- */
+const togglePanel = (p: 'questions' | 'walks' | 'keys') => { ui.panel = ui.panel === p ? null : p; refresh(false); };
+$('b-questions').onclick = () => togglePanel('questions');
+$('b-walk').onclick = () => togglePanel('walks');
+$('b-keys').onclick = () => togglePanel('keys');
+$('walks').innerHTML = walksHTML();
+$('walks').addEventListener('click', (e) => { const b = (e.target as Element).closest<HTMLElement>('[data-walk]'); if (b) startWalk(b.dataset.walk as WalkKey); });
+$('questions').addEventListener('click', (e) => { const b = (e.target as Element).closest<HTMLElement>('[data-q]'); if (b) { const q = QUESTIONS[Number(b.dataset.q)]; setFocus(q.focus, q); } });
+const toggleWhatIf = () => { if (ui.walk) return; ui.whatIf = !ui.whatIf; applyWhatIf(); refresh(false); };
+const toggleChild = () => { ui.child = !ui.child; $('b-child').setAttribute('aria-pressed', String(ui.child)); refresh(false); };
+bay.addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('[data-act]');
+  if (!b) return;
+  switch (b.dataset.act) {
+    case 'fold': ui.folded = !ui.folded; break;
+    case 'answer': ui.answer = true; break;
+    case 'whatif': toggleWhatIf(); return;
+    case 'next': setFocus(stepFocus(ui.offScript ?? ui.focus, 1)); return;
+    case 'home': setFocus('car'); return;
+    case 'backtowalk': ui.offScript = null; refresh(true); return;
+    case 'endwalk': endWalk(); return;
+    case 'nextwalk': walkStep(1); return;
+    case 'walkrun': setWalkRun(!ui.walkRun); break;
+    default: return;
   }
-  const p = PARTS[k];
-  el.innerHTML = `<h3>${p.title}</h3><p class="kid">${p.kid}</p><p class="adult"><b>For grown-ups</b>${p.adult}</p>`;
-}
-
-function select(k: PartKey | null) {
-  ui.selected = k;
-  for (const kk of PART_ORDER) $(`chip-${kk}`).setAttribute('aria-pressed', String(kk === k));
-  $('chip-all').setAttribute('aria-pressed', String(!k));
-  const apartT = explodeAfterPick(k, ui.explodeT);
-  if (apartT !== ui.explodeT) setExplode(apartT);
-  applyHighlight(k); renderInfo(); labels.setSelected(k);
-  if (k && SLOW_PARTS.includes(k) && !ui.slowManual) setToggle('slow', true);
-  if (!k && ui.explodeT < 0.05 && !ui.slowManual) setToggle('slow', false);
-  if (k) focusPart(k); else focusHome(ui.explodeT);
-}
-
-/* ---------------- panel controls ---------------- */
-type Toggle = 'cruise' | 'lights' | 'slow' | 'sound';
-const TOGGLE_IDS: Record<Toggle, string> = { cruise: 't-cruise', lights: 't-lights', slow: 't-slow', sound: 't-sound' };
-function setToggle(name: Toggle, val: boolean) {
-  if (name === 'lights') pressLightsButton(); // on the real car the remote's '+' is what switches them
-  if (name === 'cruise') { input.cruise = val; if (val) sound.start(); syncHoldButtons(); }
-  else if (name === 'sound') { sound.enabled = val; if (!val) sound.mute(); }
-  else ui[name] = val;
-  $(TOGGLE_IDS[name]).setAttribute('aria-pressed', String(val));
-}
-$('t-cruise').onclick = () => setToggle('cruise', !input.cruise);
-$('t-lights').onclick = () => setToggle('lights', !ui.lights);
-$('t-slow').onclick = () => { ui.slowManual = true; setToggle('slow', !ui.slow); };
-$('t-sound').onclick = () => setToggle('sound', !sound.enabled);
-
-const holdButtons = [...document.querySelectorAll<HTMLButtonElement>('.hold')];
-function syncHoldButtons() {
-  for (const b of holdButtons) { const a = b.dataset.act as Action; b.classList.toggle('on', input.isHeld(a) || (a === 'fwd' && input.cruise)); }
-}
-const press = (a: Action, src: string) => { sound.start(); input.press(a, src); syncHoldButtons(); };
-const release = (a: Action, src: string) => { input.release(a, src); syncHoldButtons(); };
-for (const b of holdButtons) {
-  const a = b.dataset.act as Action;
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); press(a, 'btn'); });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, () => release(a, 'btn'));
-  b.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); press(a, 'btnkey'); } });
-  b.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') release(a, 'btnkey'); });
-  b.addEventListener('contextmenu', (e) => e.preventDefault());
-}
-const KEYS: Record<string, Action> = { ArrowUp: 'fwd', KeyW: 'fwd', ArrowDown: 'back', KeyS: 'back', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
-addEventListener('keydown', (e) => {
-  if (e.target instanceof Element && e.target.closest('input')) return;
-  const a = KEYS[e.code];
-  if (a) { e.preventDefault(); if (!e.repeat) press(a, `key:${e.code}`); }
-  else if (e.code === 'KeyL' && !e.repeat) setToggle('lights', !ui.lights);
-  else if (e.code === 'KeyE' && !e.repeat) setExplode(ui.explodeT > 0.5 ? 0 : 1);
+  refresh(false);
 });
-addEventListener('keyup', (e) => { const a = KEYS[e.code]; if (a) release(a, `key:${e.code}`); });
-addEventListener('blur', () => { input.clear(); syncHoldButtons(); });
+$('steps').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('[data-step]');
+  if (!b || !ui.walk) return;
+  ui.offScript = null; ui.walkPos[ui.walk] = { step: Number(b.dataset.step), beat: 0, end: false }; setWalkRun(false); refresh(true);
+});
+$('b-child').onclick = toggleChild;
+$('b-sound').onclick = () => { sound.enabled = !sound.enabled; if (!sound.enabled) sound.mute(); $('b-sound').setAttribute('aria-pressed', String(sound.enabled)); };
 
-const slider = $<HTMLInputElement>('explode'), bExplode = $('b-explode');
-function setExplode(t: number, fromSlider = false) {
-  ui.explodeT = t;
-  if (pickAfterExplode(ui.selected, t) !== ui.selected) select(null); // the wires vanish as it comes apart: go back to the whole car
-  if (!fromSlider) slider.value = String(Math.round(t * 100));
-  bExplode.setAttribute('aria-pressed', String(t > 0.5));
-  bExplode.textContent = t > 0.5 ? 'Put it together' : 'Take it apart';
-  if (t > 0.05 && !ui.slow && !ui.slowManual) setToggle('slow', true);
-  if (t <= 0.05 && ui.slow && !ui.slowManual && !(ui.selected && SLOW_PARTS.includes(ui.selected))) setToggle('slow', false);
-  if (!ui.selected) focusHome(t);
-}
-bExplode.onclick = () => setExplode(ui.explodeT > 0.5 ? 0 : 1);
-slider.addEventListener('input', () => setExplode(Number(slider.value) / 100, true));
+/* ---------------- driving: the remote, the run button, the keys ---------------- */
+const press = (a: Action, src: string) => { sound.start(); input.press(a, src); };
+const release = (a: Action, src: string) => { input.release(a, src); };
+const runBtn = $<HTMLButtonElement>('b-run');
+let runHeld: Action | null = null;
+const runDown = () => { if (runHeld) return; runHeld = runAction().action; press(runHeld, 'run'); runBtn.setAttribute('aria-pressed', 'true'); };
+const runUp = () => { if (runHeld) release(runHeld, 'run'); runHeld = null; runBtn.setAttribute('aria-pressed', 'false'); };
+runBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); runBtn.setPointerCapture(e.pointerId); runDown(); });
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) runBtn.addEventListener(ev, runUp);
+runBtn.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); e.stopPropagation(); runDown(); } });
+runBtn.addEventListener('keyup', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); runUp(); } });
 
-const chips = $('chips');
-for (const k of PART_ORDER) {
-  const b = document.createElement('button');
-  b.className = 'chip'; b.id = `chip-${k}`; b.setAttribute('aria-pressed', 'false');
-  b.innerHTML = `<i style="--c:${PARTS[k].color}"></i><span>${PARTS[k].chip}</span>`;
-  b.onclick = () => select(ui.selected === k ? null : k);
-  chips.append(b);
-}
-{
-  const b = document.createElement('button');
-  b.className = 'chip'; b.id = 'chip-all'; b.setAttribute('aria-pressed', 'true');
-  b.innerHTML = '<i style="--c:var(--ink)"></i><span>Whole car</span>';
-  b.onclick = () => select(null);
-  chips.append(b);
-}
-$('b-reset').onclick = () => { select(null); focusHome(ui.explodeT); };
-
-const dRough = $('d-rough'), dLock = $('d-lock');
-dRough.onclick = () => {
-  ground.rough = !ground.rough;
-  dRough.setAttribute('aria-pressed', String(ground.rough));
-  ground.reshape();
-  if (ground.rough) {
-    sound.start();
-    if (!input.cruise && !input.isHeld('fwd')) setToggle('cruise', true);
-    if (ui.explodeT > 0.05) setExplode(0);
-    if (!ui.selected) { const t = new THREE.Vector3(0, 4.2, 0); tweenTo(t, t.clone().add(new THREE.Vector3(6, 6, 40).multiplyScalar(stage.fitK()))); }
+function setLights(on: boolean) { ui.lights = on; pressLightsButton(); }
+const DRIVE_KEYS: Record<string, Action> = { ArrowUp: 'fwd', ArrowDown: 'back', ArrowLeft: 'left', ArrowRight: 'right' };
+addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || (e.target instanceof Element && e.target.closest('input, textarea'))) return;
+  const k = e.key.toLowerCase();
+  // a walk takes ← → and the clicker's keys; otherwise PageUp/PageDown step along the chain
+  if (ui.walk && (e.key === 'ArrowRight' || e.key === 'PageDown')) walkStep(1);
+  else if (ui.walk && (e.key === 'ArrowLeft' || e.key === 'PageUp')) walkStep(-1);
+  else if (e.key === 'PageDown' || e.key === 'PageUp') setFocus(stepFocus(ui.offScript ?? ui.focus, e.key === 'PageDown' ? 1 : -1));
+  else if (DRIVE_KEYS[e.key]) { if (!e.repeat) press(DRIVE_KEYS[e.key], `key:${e.key}`); }
+  else if (e.key === ' ') { if (!e.repeat && (e.target as Element)?.tagName !== 'BUTTON') runDown(); else return; }
+  else if (/^[1-7]$/.test(e.key)) setFocus(FOCUS_ORDER[Number(e.key) - 1]);
+  else if (e.key === 'Escape') {
+    if (ui.panel) { ui.panel = null; refresh(false); } else if (ui.offScript) { ui.offScript = null; refresh(true); } else if (ui.walk) endWalk(); else setFocus('car');
   }
-};
-dLock.onclick = () => {
-  ui.locked = !ui.locked;
-  dLock.setAttribute('aria-pressed', String(ui.locked));
-  dLock.textContent = ui.locked ? 'Unlock the springs' : 'Lock the springs';
-};
+  else if (e.key === 'Backspace' && ui.offScript) { ui.offScript = null; refresh(true); }
+  else if (ui.walk && (k === 'b' || e.key === '.')) { setWalkRun(!ui.walkRun); refresh(false); }
+  else if (k === 'q') togglePanel('questions');
+  else if (k === 'g') togglePanel('walks');
+  else if (k === 'w') toggleWhatIf();
+  else if (k === 'a') { ui.answer = !ui.answer; refresh(false); }
+  else if (k === 'h') { ui.folded = !ui.folded; refresh(false); }
+  else if (k === 'n') toggleChild();
+  else if (k === 'l' && !e.repeat) setLights(!ui.lights);
+  else if (k === 'e' && !e.repeat) { const t = ui.explodeT > 0.5 ? 0 : 1; ui.whatIf = false; applyWhatIf(); setExplode(t); refresh(false); }
+  else return;
+  e.preventDefault();
+});
+addEventListener('keyup', (e) => {
+  const a = DRIVE_KEYS[e.key];
+  if (a && !(ui.walk && (e.key === 'ArrowLeft' || e.key === 'ArrowRight'))) release(a, `key:${e.key}`);
+  if (e.key === ' ') runUp();
+});
+addEventListener('blur', () => { input.clear(); runUp(); if (whatIfHeld) input.press(whatIfHeld, 'whatif'); if (ui.walkRun) input.press(runAction().action, 'walk'); });
+
+function setExplode(t: number) {
+  ui.explodeT = t;
+  autoSlow();
+  if (viewFocus() === 'car') focusHome(t);
+}
 
 /* ---------------- picking parts in 3D ---------------- */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -208,7 +318,7 @@ function hitsAt(cx: number, cy: number, canvas: HTMLCanvasElement, cam: THREE.Ca
 }
 function pickPart(cx: number, cy: number): PartKey | null {
   const hits = hitsAt(cx, cy, carCanvas, camera, allMeshes.filter((m) => isShown(m)));
-  const h = hits.find((x) => { const mt = (x.object as THREE.Mesh).material; return mt !== GHOST && mt !== GHOST_NEAR; }) ?? hits[0];
+  const h = hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
   return h ? (h.object.userData.part as PartKey) : null;
 }
 let downAt: { x: number; y: number } | null = null;
@@ -217,7 +327,7 @@ carCanvas.addEventListener('pointerup', (e) => {
   if (!downAt) return;
   const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
   downAt = null;
-  if (moved < 6) { const k = pickPart(e.clientX, e.clientY); if (k) select(k === ui.selected ? null : k); }
+  if (moved < 6) { const k = pickPart(e.clientX, e.clientY); if (k) { sound.start(); const f = focusOfPart(k); setFocus(f === viewFocus() ? 'car' : f); } }
 });
 carCanvas.addEventListener('pointermove', (e) => { if (!e.buttons) carCanvas.classList.toggle('picking', !!pickPart(e.clientX, e.clientY)); });
 
@@ -237,7 +347,7 @@ remoteCanvas.addEventListener('pointerdown', (e) => {
   const ctrl = remoteCtrlAt(e);
   if (!ctrl) return;
   e.preventDefault(); remoteCanvas.setPointerCapture(e.pointerId); sound.start();
-  if (ctrl === 'lights') { buttonHeld = true; setToggle('lights', !ui.lights); return; }
+  if (ctrl === 'lights') { buttonHeld = true; setLights(!ui.lights); return; }
   if (ctrl === 'trigger') {
     const a = remoteScreen(remote.trigger.getWorldPosition(new THREE.Vector3())), b = remoteScreen(remote.trigger.localToWorld(new THREE.Vector3(1, 0, 0)));
     const n = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -279,10 +389,16 @@ new ResizeObserver(resize).observe(bay);
 new ResizeObserver(resize).observe(remoteCanvas);
 resize();
 camera.position.copy(stage.home.target).add(stage.home.pos.clone().sub(stage.home.target).multiplyScalar(stage.fitK()));
-void car.decalsReady.then(() => applyHighlight(ui.selected));
+void car.decalsReady.then(() => applyFocus(castOf(viewFocus())));
+
+/** How far to slide the picture so the part in focus sits clear of the notes card on the right. */
+function targetShift() {
+  const notes = $('notes');
+  if (notes.hidden || ui.folded || viewFocus() === 'car') return 0;
+  return (notes.offsetWidth + 14) / 2;
+}
 
 /* ---------------- frame loop ---------------- */
-const ledDot = $('led-dot'), gNum = $('g-num'), gNeedle = $('g-needle'), gArc = $('g-arc');
 let last = performance.now();
 function frame(now: number) {
   const rdt = frameStep(now, last);
@@ -293,48 +409,48 @@ function frame(now: number) {
   const e = ease(clamp(ui.explode, 0, 1)), onStand = ui.explode > 0.02;
   setApart(onStand);
 
-  const thr = input.throttleTarget(), steer = input.steerTarget();
+  const off = blocked();
+  const thr = off ? 0 : input.throttleTarget(), steer = off ? 0 : input.steerTarget();
   const { accel } = stepDrive(drive, thr, steer, dt, onStand);
   ground.follow(drive.pose);
 
   const bumps = {} as CornerBumps;
   for (const c of CORNERS) { const [wx, wz] = wheelWorld(drive.pose, c.x, c.z); bumps[c.key] = onStand ? 0 : groundHeight(wx, wz, ground.rough); }
   stepSuspension(body, bumps, { locked: ui.locked, accel, v: drive.v, steer: drive.steer, dt });
-  ride.sample(dt, bumps.FL, bodyHeightAt(body, XF, -TZ), onStand);
 
-  poseCar(car, { drive, body, bumps, explode: e, explodeRaw: ui.explode, onStand, lights: ui.lights, selected: ui.selected, dt });
-  if (ui.selected) pulseHighlight(ui.selected, now / 1000);
+  const cast = castOf(viewFocus());
+  const lightsOn = ui.lights && activeWhatIf() !== 'switchOff';
+  poseCar(car, { drive, body, bumps, explode: e, explodeRaw: ui.explode, onStand, lights: lightsOn, ledGlows: !cast || cast.parts.includes('lights'), steerHeld: steer, dt });
+  const v = viewFocus(), part = v === 'all' ? null : FOCUS[v].part;
+  if (part && part !== 'wires') pulseHighlight(part, now / 1000);
 
-  // radio rings from both antennas while a command is being sent
-  const commanding = input.commanding() || buttonPulse > 0; // the '+' button sends a command too
+  // radio rings from the remote and at the car's antenna while a command is being sent (not with the remote off)
+  const commanding = (input.commanding() || buttonPulse > 0) && activeWhatIf() !== 'remoteOff';
   ui.ringClock += rdt;
   if (commanding && ui.ringClock > 0.32) {
     ui.ringClock = 0;
     car.root.updateMatrixWorld(true);
-    if (!ui.selected || ui.selected === 'board') carRings.emit(ANT_TIP.clone().applyMatrix4(car.pieces.board.matrixWorld));
+    if (!cast || cast.parts.includes('board')) carRings.emit(ANT_TIP.clone().applyMatrix4(car.pieces.board.matrixWorld));
     remoteRings.emit(remote.antennaTip.getWorldPosition(new THREE.Vector3()));
   }
   carRings.update(rdt, camera);
   remoteRings.update(rdt, remote.camera);
 
   // the remote shows what the hands are doing
-  remote.wheel.rotation.z = lerp(remote.wheel.rotation.z, (input.wheelDrag ?? steer) * WHEEL_TURN, Math.min(1, rdt * 14));
-  remote.trigger.rotation.z = lerp(remote.trigger.rotation.z, thr > 0 ? -0.32 : thr < 0 ? 0.24 : 0, Math.min(1, rdt * 14));
+  const rThr = input.throttleTarget(), rSteer = input.steerTarget();
+  remote.wheel.rotation.z = lerp(remote.wheel.rotation.z, (input.wheelDrag ?? rSteer) * WHEEL_TURN, Math.min(1, rdt * 14));
+  remote.trigger.rotation.z = lerp(remote.trigger.rotation.z, rThr > 0 ? -0.32 : rThr < 0 ? 0.24 : 0, Math.min(1, rdt * 14));
   buttonPulse = Math.max(0, buttonPulse - rdt);
   remote.button.position.z = lerp(remote.button.position.z, buttonHeld || buttonPulse > 0 ? -0.12 : 0, Math.min(1, rdt * 30));
-  const blink = commanding ? (Math.sin((now / 1000) * Math.PI * 14) > 0 ? 2.6 : 0.3) : 1.6;
-  remote.led.material.emissiveIntensity = blink;
-  ledDot.style.opacity = String(commanding ? (blink > 1 ? 1 : 0.25) : 1);
+  remote.led.material.emissiveIntensity = commanding ? (Math.sin((now / 1000) * Math.PI * 14) > 0 ? 2.6 : 0.3) : 1.6;
 
-  // speedometer shows real-size speed, full throttle being the box's claimed top speed (not measured yet, issue #9)
-  const kmh = Math.abs(drive.throttle) * 20;
-  gNum.textContent = String(Math.round(kmh));
-  gNeedle.setAttribute('transform', `rotate(${-90 + (kmh / 20) * 180} 60 60)`);
-  gArc.setAttribute('stroke-dasharray', `${(kmh / 20) * 100} 100`);
-  gArc.style.opacity = kmh > 0.3 ? '1' : '0';
-
-  flow.tick(rdt, activeFlows(thr, steer));
   sound.update(drive.throttle, drive.steerVel, ui.timeScale);
+
+  // the "all together" step lights the walk's steps in turn
+  if (ui.walkRun) {
+    const before = litSteps(); ui.runClock += rdt;
+    if (litSteps() !== before && ui.walk) $('steps').innerHTML = stepsHTML(ui.walk, ui.walkPos[ui.walk], !!ui.offScript, litSteps());
+  }
 
   if (camTween) {
     camTween.t += rdt / camTween.dur;
@@ -343,16 +459,18 @@ function frame(now: number) {
     camera.position.lerpVectors(camTween.fP, camTween.tP, k);
     if (camTween.t >= 1) camTween = null;
   }
+  ui.shift = lerp(ui.shift, targetShift(), Math.min(1, rdt * (reduceMotion ? 30 : 6)));
+  stage.setShift(ui.shift);
   orbit.update();
   stage.followTarget();
 
   car.root.updateMatrixWorld(true);
-  labels.update(car, camera, bay.clientWidth, bay.clientHeight, ui.explode > 0.55, ui.selected, rdt);
-  rideGraph.draw(ride, ground.rough || ui.locked);
+  const apart = ui.explode > 0.55, hot = !ui.walk && viewFocus() === 'car';
+  labels.update(car, camera, bay.clientWidth, bay.clientHeight, (k) => apart || (hot && HOT_PARTS.has(k)), part, rdt);
 
   stage.renderer.render(scene, camera);
   remote.renderer.render(remote.scene, remote.camera);
   requestAnimationFrame(frame);
 }
-renderInfo();
+refresh(false);
 requestAnimationFrame(frame);

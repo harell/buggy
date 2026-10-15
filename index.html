@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Interactive 3D model of a 1:16 RC buggy for kids: drive it from the remote, take it apart, and see how the motor, gears, steering and springs work.">
+<meta name="description" content="Interactive 3D model of a 1:16 RC buggy for a grown-up and a child to explore together: point at a part, follow the energy from the battery to the wheels, and see how the motor, gears, steering and springs work.">
 <title>Shuttle 08 Workshop</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='22' width='44' height='16' rx='5' fill='%231c5fe0'/%3E%3Ccircle cx='18' cy='42' r='9' fill='%23152238'/%3E%3Ccircle cx='46' cy='42' r='9' fill='%23152238'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,82 +11,56 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Nunito:wght@500;600;700;800&display=swap">
 </head>
 <body>
-<div class="app">
-  <aside class="bench" aria-label="Remote control and lesson controls">
-    <header class="brand">
-      <div class="brand-mark">SHUTTLE <span>08</span></div>
-      <p class="brand-sub">1:16 · 2WD · 2.4 GHz</p>
-    </header>
+<main class="bay" id="bay" tabindex="-1">
+  <canvas id="car" aria-label="3D model of the buggy on a bumpy track. Drag to rotate, scroll to zoom, click a part to look closer."></canvas>
+  <div class="labels" id="labels"></div>
 
-    <section class="remote-card" aria-label="Remote control">
-      <canvas id="remote" aria-label="Remote control. Drag the wheel to steer, hold the trigger to drive, push it away to reverse, press the plus button for the lights."></canvas>
-      <span class="led-tag"><i id="led-dot"></i>2.4 GHz</span>
-      <p class="remote-hint">Turn wheel · hold trigger · + lights</p>
-    </section>
-
-    <section class="pad" aria-label="Drive buttons (hold to keep going)">
-      <button class="hold" id="b-fwd" data-act="fwd" aria-label="Forward (hold)">▲ Forward</button>
-      <button class="hold" id="b-left" data-act="left" aria-label="Steer left (hold)">◀ Left</button>
-      <button class="hold" id="b-back" data-act="back" aria-label="Reverse (hold)">▼ Back</button>
-      <button class="hold" id="b-right" data-act="right" aria-label="Steer right (hold)">Right ▶</button>
-    </section>
-
-    <div class="toggles">
-      <button class="toggle" id="t-cruise" aria-pressed="false" title="Keep driving forward without holding">Keep going</button>
-      <button class="toggle" id="t-lights" aria-pressed="true">Lights</button>
-      <button class="toggle" id="t-slow" aria-pressed="false" title="Slow everything down to see the gears">Slow-mo</button>
-      <button class="toggle" id="t-sound" aria-pressed="true">Sound</button>
+  <div class="tl">
+    <div class="row">
+      <button class="pill" id="b-questions" aria-expanded="false" aria-controls="questions">? Questions <kbd>Q</kbd></button>
+      <button class="pill" id="b-walk" aria-expanded="false" aria-controls="walks">Walk <kbd>G</kbd></button>
     </div>
+    <div class="panel qlist" id="questions" hidden></div>
+    <div class="panel walklist" id="walks" hidden></div>
+    <div id="backchip"></div>
+  </div>
 
-    <section class="apart">
-      <button class="big" id="b-explode" aria-pressed="false">Take it apart</button>
-      <div class="slider-row"><span>Together</span><input type="range" id="explode" min="0" max="100" value="0" aria-label="How far apart"><span>Apart</span></div>
-    </section>
+  <nav class="crumbs glass" id="crumbs" aria-label="Where you are"></nav>
+  <div class="steps glass" id="steps" hidden></div>
 
-    <section class="demo" aria-label="Springs demo">
-      <h2>Springs demo</h2>
-      <div class="demo-row">
-        <button class="dbtn" id="d-rough" aria-pressed="false">Bumpy road</button>
-        <button class="dbtn" id="d-lock" aria-pressed="false">Lock the springs</button>
-      </div>
-      <p>Turn on the bumpy road and watch the wheels jump while the body glides. Then lock the springs: now the whole car shakes.</p>
-    </section>
+  <aside class="notes glass" id="notes" aria-live="polite"></aside>
+  <div class="bigcap glass" id="bigcap" hidden></div>
+  <div class="caption glass" id="caption" hidden></div>
+  <div class="endcard glass" id="endcard" hidden></div>
 
-    <section>
-      <h2>Look closer</h2>
-      <div class="chips" id="chips"></div>
-    </section>
+  <section class="remote-dock" aria-label="Remote control">
+    <canvas id="remote" aria-label="Remote control. Drag the wheel to steer, hold the trigger to drive, push it away to reverse, press the plus button for the lights."></canvas>
+    <button class="run" id="b-run">Hold · Drive</button>
+  </section>
 
-    <section class="info" id="info" aria-live="polite"></section>
-  </aside>
-
-  <main class="bay" id="bay">
-    <canvas id="car" aria-label="3D model of the buggy. Drag to rotate, scroll or pinch to zoom, tap a part to look closer."></canvas>
-    <div class="labels" id="labels"></div>
-    <p class="hint">Drag to spin · scroll to zoom · right-drag to slide · tap a part</p>
-    <div class="hud"><button id="b-reset">Reset view</button></div>
-    <div class="ride" id="ride" hidden>
-      <h4>Front-left corner: bumps vs ride</h4>
-      <canvas id="ride-c" aria-label="Graph of wheel bumps compared with body movement"></canvas>
-      <div class="key"><span><i style="background:var(--glow)"></i>Wheels</span><span><i style="background:var(--blue)"></i>Body</span></div>
-      <div class="feel" id="ride-feel">Body feels 0% of the bumps</div>
-    </div>
-    <div class="flow" id="flow" aria-live="polite"></div>
-    <div class="gauge" aria-label="Speed, real-size. Full speed is the box's claim of 20 km/h, not a measurement.">
-      <svg viewBox="0 0 120 66" aria-hidden="true">
-        <path d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="var(--line)" stroke-width="8" stroke-linecap="round"/>
-        <path id="g-arc" d="M12 60 A48 48 0 0 1 108 60" fill="none" stroke="var(--blue)" stroke-width="8" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/>
-        <g font-size="8" fill="var(--muted)" font-family="Chakra Petch, sans-serif" text-anchor="middle">
-          <text x="12" y="52" dx="10">0</text><text x="26" y="25">5</text><text x="60" y="10" dy="4">10</text><text x="94" y="25">15</text><text x="108" y="52" dx="-10">20</text>
-        </g>
-        <line id="g-needle" x1="60" y1="60" x2="60" y2="20" stroke="var(--glow)" stroke-width="3" stroke-linecap="round" transform="rotate(-90 60 60)"/>
-        <circle cx="60" cy="60" r="4" fill="var(--ink)"/>
-      </svg>
-      <div><span class="num" id="g-num">0</span> <span class="unit">km/h real-size</span></div>
-      <div class="claim">top speed: box claim</div>
-    </div>
-  </main>
-</div>
+  <footer class="corner">
+    <span class="brand">SHUTTLE <b>08</b></span>
+    <button class="mini" id="b-child" aria-pressed="false" title="Hide the notes and show one big question (N)">Child view <kbd>N</kbd></button>
+    <button class="mini" id="b-sound" aria-pressed="true">Sound</button>
+    <button class="mini" id="b-keys" aria-expanded="false" aria-controls="keys">Keys</button>
+  </footer>
+  <div class="panel keys" id="keys" hidden>
+    <h2>Keyboard</h2>
+    <dl>
+      <dt>Click a dot, or <kbd>1</kbd>–<kbd>7</kbd></dt><dd>Look at a part</dd>
+      <dt><kbd>PgDn</kbd> <kbd>PgUp</kbd></dt><dd>Next or previous part along the chain (a presentation clicker sends these)</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Back out to the whole car</dd>
+      <dt><kbd>Space</kbd></dt><dd>Hold to run what you're looking at</dd>
+      <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>Drive and steer</dd>
+      <dt><kbd>Q</kbd> / <kbd>G</kbd></dt><dd>Questions / walks</dd>
+      <dt><kbd>W</kbd></dt><dd>Show the what-if</dd>
+      <dt><kbd>A</kbd></dt><dd>Show the answer</dd>
+      <dt><kbd>H</kbd> / <kbd>N</kbd></dt><dd>Fold the notes / child view</dd>
+      <dt><kbd>E</kbd> / <kbd>L</kbd></dt><dd>Take apart / lights</dd>
+      <dt>In a walk</dt><dd><kbd>→</kbd> or <kbd>PgDn</kbd> question, answer, next · <kbd>B</kbd> or <kbd>.</kbd> run · <kbd>Backspace</kbd> back to the walk</dd>
+    </dl>
+  </div>
+</main>
 <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

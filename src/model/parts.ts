@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { PART_INFO, PART_ORDER, type Circuit, type PartInfo, type PartKey } from '../core/catalog';
-import type { Cast } from '../core/lesson';
+import { PART_ORDER, type PartKey } from '../core/catalog';
+import { COMPS, type CompKey } from '../core/components';
 
 export type StdMat = THREE.MeshStandardMaterial;
 type MatSource = StdMat | (() => StdMat);
@@ -17,16 +17,17 @@ export interface MeshMeta {
   /** The parts whose picking turns this cover see-through. */
   cutaway?: readonly PartKey[];
   isLed?: boolean;
+  /** Set when the mesh's component differs from its piece's, or once looked up. */
+  comp?: CompKey;
 }
 export type PartMesh = THREE.Mesh<THREE.BufferGeometry, THREE.Material> & { userData: MeshMeta };
 
-/** A group that moves out by `ex` (scaled by how far apart the car is) in the exploded view. */
-export interface PieceMeta { ex: THREE.Vector3; base: THREE.Vector3; dynamic: boolean }
+export interface PieceMeta { ex: THREE.Vector3; base: THREE.Vector3; dynamic: boolean; comp: CompKey }
 export type Piece = THREE.Group & { userData: PieceMeta };
 
-export interface Part extends PartInfo { key: PartKey; meshes: PartMesh[]; pieces: Piece[] }
+export interface Part { key: PartKey; meshes: PartMesh[]; pieces: Piece[] }
 
-export const PARTS = Object.fromEntries(PART_ORDER.map((k) => [k, { key: k, ...PART_INFO[k], meshes: [], pieces: [] }])) as unknown as Record<PartKey, Part>;
+export const PARTS = Object.fromEntries(PART_ORDER.map((k) => [k, { key: k, meshes: [], pieces: [] }])) as unknown as Record<PartKey, Part>;
 export const allMeshes: PartMesh[] = [];
 
 const std = (o: THREE.MeshStandardMaterialParameters) => () => new THREE.MeshStandardMaterial(o);
@@ -46,29 +47,46 @@ export const MAT = {
   blueWire: std({ color: 0x2a64d6, roughness: 0.45 }),
 } satisfies Record<string, () => StdMat>;
 
-/** Shared see-through material for everything outside the focus: faint, but enough to keep the car's shape. */
+/** Shared see-through material for everything outside the spotlight: faint, but enough to keep the car's shape. */
 export const GHOST = new THREE.MeshStandardMaterial({ color: 0x6f84a3, roughness: 1, transparent: true, opacity: 0.13, depthWrite: false });
-/** The circuit each wire belongs to, so a focus can keep just its own loop solid. */
-const wireCircuit = new WeakMap<THREE.Object3D, Circuit>();
+
+/** What the bench shows: the components lit up (none: the whole car is solid) and the ones taken off the car. */
+export interface View { spot: ReadonlySet<CompKey>; removed: ReadonlySet<CompKey> }
+const NO_VIEW: View = { spot: new Set(), removed: new Set() };
 
 /** Meshes that never cast a shadow: made with cast: false, or too small for theirs to show. */
 const noShadow = new WeakSet<THREE.Object3D>();
-/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or a part is in focus. */
+/** Meshes shut inside a housing, whose shadow only shows while the car is taken apart or something is spotlit. */
 const shutIn = new WeakSet<THREE.Object3D>();
-let apart = false, focus: Cast | null = null;
-/** Whether a mesh is drawn solid under the current focus (everything is, without one). */
-const inFocus = (m: PartMesh) => {
-  if (!focus) return true;
-  if (!focus.parts.includes(m.userData.part)) return false;
-  const c = wireCircuit.get(m);
-  return !c || focus.circuits.includes(c);
-};
-/** A cover opened up for the focus: see-through, so it casts no shadow onto what it shows. */
-const cutOpen = (m: PartMesh) => focus !== null && !!m.userData.cutaway?.some((k) => focus!.open.includes(k));
-// with a focus, everything else is ghosted and the focus's covers are open, so what is shut inside shows
-const casts = (m: PartMesh) => inFocus(m) && !noShadow.has(m) && !cutOpen(m) && (apart || focus !== null || !shutIn.has(m));
+let apart = false, view: View = NO_VIEW;
 
-export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean }
+/** The component a mesh belongs to: its own, or its piece's. Meshes made after the car (decals) are found on demand. */
+export function compOf(m: PartMesh): CompKey {
+  if (m.userData.comp) return m.userData.comp;
+  for (let n: THREE.Object3D | null = m.parent; n; n = n.parent) {
+    const c = (n.userData as Partial<PieceMeta>).comp;
+    if (c) return (m.userData.comp = c);
+  }
+  throw new Error(`mesh of ${m.userData.part} is not on any piece`);
+}
+const isRemoved = (m: PartMesh) => view.removed.has(compOf(m));
+/** Whether a mesh is drawn solid: everything is when nothing is spotlit. */
+const isSolid = (m: PartMesh) => view.spot.size === 0 || view.spot.has(compOf(m));
+/**
+ * A cover opened up so the spotlight can see in: see-through, and casting no shadow onto what it shows. It opens for
+ * a spotlit component whose part it covers; a housing lit up on its own stays shut, so you see the housing.
+ */
+const cutOpen = (m: PartMesh) => {
+  const cut = m.userData.cutaway;
+  if (!cut || view.spot.size === 0) return false;
+  const own = compOf(m);
+  for (const c of view.spot) if (cut.includes(COMPS[c].part) && !(c === own && COMPS[own].housing)) return true;
+  return false;
+};
+// with a spotlight, everything else is ghosted and the covers are open, so what is shut inside shows
+const casts = (m: PartMesh) => !isRemoved(m) && isSolid(m) && !noShadow.has(m) && !cutOpen(m) && (apart || view.spot.size > 0 || !shutIn.has(m));
+
+export interface MkOpts { cast?: boolean; receive?: boolean; cutaway?: PartKey | readonly PartKey[]; led?: boolean; comp?: CompKey }
 
 /** Make a mesh that belongs to a part. Each mesh gets its own material so it can glow on its own. */
 export function mk(geo: THREE.BufferGeometry, src: MatSource, part: PartKey, o: MkOpts = {}): PartMesh {
@@ -79,18 +97,19 @@ export function mk(geo: THREE.BufferGeometry, src: MatSource, part: PartKey, o: 
   m.receiveShadow = o.receive ?? true;
   m.userData = {
     part, mat, em0: mat.emissive.clone(), emI0: mat.emissiveIntensity, op0: mat.opacity, tr0: mat.transparent, dw0: mat.depthWrite,
-    cutaway: o.cutaway === undefined ? undefined : ([] as PartKey[]).concat(o.cutaway), isLed: o.led,
+    cutaway: o.cutaway === undefined ? undefined : ([] as PartKey[]).concat(o.cutaway), isLed: o.led, comp: o.comp,
   };
   PARTS[part].meshes.push(m);
   allMeshes.push(m);
   return m;
 }
 
-export function piece(part: PartKey, parent: THREE.Object3D, ex: THREE.Vector3, dynamic = false): Piece {
+/** A group of one component's meshes that moves out by `ex` (scaled by how far apart the car is) in the exploded view. */
+export function piece(comp: CompKey, parent: THREE.Object3D, ex: THREE.Vector3, dynamic = false): Piece {
   const g = new THREE.Group() as Piece;
-  g.userData = { ex, base: new THREE.Vector3(), dynamic };
+  g.userData = { ex, base: new THREE.Vector3(), dynamic, comp };
   parent.add(g);
-  PARTS[part].pieces.push(g);
+  PARTS[COMPS[comp].part].pieces.push(g);
   return g;
 }
 
@@ -101,34 +120,31 @@ export function recordBases(): void {
 
 export const exOf = (o: Piece, e: number): THREE.Vector3 => o.userData.ex.clone().multiplyScalar(e);
 
-/** Draw the cast solid (or everything when null): ghost the rest, open its covers, reset glows. */
-export function applyFocus(cast: Cast | null): void {
-  focus = cast;
+/** Show the bench's view: spotlit components solid and the rest ghosted, removed ones gone, covers opened. */
+export function applyView(v: View): void {
+  view = v;
   for (const m of allMeshes) {
-    const meta = m.userData, base = meta.mat, on = inFocus(m);
-    m.material = on ? base : GHOST;
+    const meta = m.userData, base = meta.mat;
+    m.visible = !isRemoved(m);
+    m.material = isSolid(m) ? base : GHOST;
     m.castShadow = casts(m);
     if (meta.cutaway) {
       const cut = cutOpen(m);
+      if (base.transparent !== (cut || meta.tr0)) base.needsUpdate = true;
       base.transparent = cut || meta.tr0;
       base.opacity = cut ? 0.2 : meta.op0;
       base.depthWrite = cut ? false : meta.dw0;
-      base.needsUpdate = true;
     }
-    if (!meta.isLed) { base.emissive.copy(meta.em0); base.emissiveIntensity = meta.emI0; }
   }
 }
-
-/** Focus one part on its own, with its covers open (or the whole car when null). */
-export const applyHighlight = (k: PartKey | null): void => applyFocus(k ? { parts: [k], circuits: ['batt', 'drive', 'steer', 'light'], open: [k] } : null);
-
-/** Remember which circuit a wire belongs to (call as each wire is made). */
-export function markWire(mesh: THREE.Object3D, circuit: Circuit): void { wireCircuit.set(mesh, circuit); }
+/** Whether a component is shown solid (not ghosted, not removed) in the current view. */
+export const compSolid = (c: CompKey): boolean => !view.removed.has(c) && (view.spot.size === 0 || view.spot.has(c));
+export const compRemoved = (c: CompKey): boolean => view.removed.has(c);
 
 /**
  * Stop meshes casting shadows nobody would see (call once the car is built): any whose world bounding radius is
  * under `minRadius`, and the ones under `inside` (the gearbox, the motor can, the electronics tub) other than the
- * covers, whose shadow shows only while the car is apart or a part is picked.
+ * covers, whose shadow shows only while the car is apart or something is spotlit.
  */
 export function quietShadows(minRadius: number, inside: readonly THREE.Object3D[]): void {
   for (const m of allMeshes) {
@@ -145,18 +161,6 @@ export function setApart(a: boolean): void {
   if (a === apart) return;
   apart = a;
   for (const m of allMeshes) if (shutIn.has(m)) m.castShadow = casts(m);
-}
-
-const GLOW = new THREE.Color(0xff7a12);
-/** Gentle orange pulse on the selected part. */
-export function pulseHighlight(k: PartKey, seconds: number): void {
-  if (k === 'wires') return; // wires already glow with the current
-  const pulse = 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 * 0.9);
-  for (const m of PARTS[k].meshes) {
-    if (m.userData.isLed) continue;
-    m.userData.mat.emissive.copy(GLOW);
-    m.userData.mat.emissiveIntensity = 0.03 + pulse * 0.13;
-  }
 }
 
 export function isShown(o: THREE.Object3D | null): boolean {

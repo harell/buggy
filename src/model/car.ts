@@ -7,7 +7,7 @@ import { lerp, rng, TAU } from '../core/math';
 import {
   armGeo, box, cylX, cylZ, DOWN, extrudeTop, extrudeXY, facingGlow, gearGeo, interpStations, panelGeo, put, RIM_SPOKES, rimShape, ringGeo, roundRectPts, springGeo, tube, tyreGeo, UP, V, type P2,
 } from './geometry';
-import { MAT, markWire, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
+import { MAT, mk, piece, recordBases, type PartMesh, type Piece, type StdMat } from './parts';
 import {
   B_PILLAR, FRONT_PANEL, GUARD, WING_CENTRE, WING_DECK, WING_ENDPLATE, WING_LATTICE, WING_TILT, hoodSection, surfHood, FRONT_PIVOT, POD, POD_ST, podBottom, WILD, wildBottom, FRONT_SHOCK_TOP, GEAR_Z, GEARBOX, GEARBOX_OUTLINE, HOOD_ST, KNUCKLE, LOBE_Z, MOTOR_Z, PIVOT, RACK, REAR_PANEL, REAR_SHOCK_LOW, REAR_SHOCK_TOP, TUB,
   type Perforated,
@@ -15,7 +15,8 @@ import {
 import { canvasTex, decal, fontsReady, textTex } from './textures';
 
 export interface Wheel { outer: Piece; spin: THREE.Group; side: -1 | 1; front: boolean; center: THREE.Vector3 }
-export interface Shock { group: Piece; update(top: THREE.Vector3, bottom: THREE.Vector3): void }
+/** `length` is eye to eye, as last posed; the spring can be tinted to show how hard it is squeezed. */
+export interface Shock { group: Piece; spring: PartMesh; length: number; update(top: THREE.Vector3, bottom: THREE.Vector3): void }
 export interface TieRod { group: Piece; ends: PartMesh[] }
 export interface Arm { side: -1 | 1; lower: Piece }
 export type { Circuit };
@@ -248,7 +249,7 @@ export function buildCar(scene: THREE.Scene): Car {
   }
 
   /* ---- Front bumper: flat plate kicked forward at the top, round-section hoop behind and below ---- */
-  const pBumper = piece('chassis', sprung, V(2, 0, 0));
+  const pBumper = piece('bumper', sprung, V(2, 0, 0));
   {
     const sh = new THREE.Shape(), hw = BUMPER.plateW / 2, len = Math.hypot(BUMPER.top - BUMPER.bottom, 0.55), r = 0.35;
     sh.moveTo(-hw + r, 0); sh.lineTo(hw - r, 0); sh.quadraticCurveTo(hw, 0, hw, r); sh.lineTo(hw, len - r); sh.quadraticCurveTo(hw, len, hw - r, len);
@@ -318,7 +319,7 @@ export function buildCar(scene: THREE.Scene): Car {
   }
 
   /* ---- Light bar: three white LEDs in chrome bezels, in the roof's front notch ---- */
-  const pLights = piece('lights', sprung, BODY_EX); // lifts off with the body
+  const pLights = piece('lightBar', sprung, BODY_EX); // lifts off with the body
   const leds: PartMesh[] = [], ledGlows: THREE.Sprite[] = [];
   const LB = { x: LIGHT_BAR.x, y: ROOF.top - LIGHT_BAR.h / 2, tilt: 0.3 }; // face tilted forward and up
   const lightBar = new THREE.Group(); lightBar.position.set(LB.x, LB.y, 0); lightBar.rotation.z = LB.tilt; pLights.add(lightBar);
@@ -415,17 +416,17 @@ export function buildCar(scene: THREE.Scene): Car {
     lp.forEach(([x, z], i) => (i ? lid.lineTo(x, z) : lid.moveTo(x, z)));
     const hole = new THREE.Path(); hole.absarc(-1.0, 0, 0.6, 0, TAU, true); lid.holes.push(hole);
     const top = new THREE.ExtrudeGeometry(lid, { depth: 0.14, bevelEnabled: false }).rotateX(Math.PI / 2).translate(0, LID_TOP, 0);
-    bd(top, M.plastic, 0, 0, 0, { cutaway: 'board' });
-    for (const s of SIDES) bd(box(TUB.x1 - TUB.x0 - 0.6, LID_TOP - TUB.top + 0.1, 0.12), M.plastic, (TUB.x0 + TUB.x1) / 2, (LID_TOP + TUB.top) / 2 - 0.05, s * (TUB.hw - 0.3), { cutaway: 'board' });
-    for (const x of [TUB.x0 + 0.36, TUB.x1 - 0.36]) bd(box(0.12, LID_TOP - TUB.top + 0.1, 2 * TUB.hw - 0.6), M.plastic, x, (LID_TOP + TUB.top) / 2 - 0.05, 0, { cutaway: 'board' });
-    pBoard.add(mk(screwHeads([[-3.8, -2.3], [-3.8, 2.3], [3.2, -2.3], [3.2, 2.3]].map(([x, z]) => [V(x, LID_TOP + 0.02, z), UP] as const), 0.13), M.screw, 'board'));
+    bd(top, M.plastic, 0, 0, 0, { cutaway: 'board', comp: 'chassis' });
+    for (const s of SIDES) bd(box(TUB.x1 - TUB.x0 - 0.6, LID_TOP - TUB.top + 0.1, 0.12), M.plastic, (TUB.x0 + TUB.x1) / 2, (LID_TOP + TUB.top) / 2 - 0.05, s * (TUB.hw - 0.3), { cutaway: 'board', comp: 'chassis' });
+    for (const x of [TUB.x0 + 0.36, TUB.x1 - 0.36]) bd(box(0.12, LID_TOP - TUB.top + 0.1, 2 * TUB.hw - 0.6), M.plastic, x, (LID_TOP + TUB.top) / 2 - 0.05, 0, { cutaway: 'board', comp: 'chassis' });
+    pBoard.add(mk(screwHeads([[-3.8, -2.3], [-3.8, 2.3], [3.2, -2.3], [3.2, 2.3]].map(([x, z]) => [V(x, LID_TOP + 0.02, z), UP] as const), 0.13), M.screw, 'board', { comp: 'chassis' }));
   }
 
   /*
    * ---- Steering: motor, gears and rack in the nose (illustrative: the stock box was never photographed), two bare
    * steel half rods hooked into the knuckles' rear-facing steering arms ----
    */
-  const pSteerBox = piece('steering', sprung, V(4, 5.5, 0));
+  const pSteerBox = piece('steerMotor', sprung, V(4, 5.5, 0));
   const SB = { x: RACK.x - 0.53, motorX: RACK.x - 1.57, y: RACK.y - 0.35 }; // pinion shaft, motor shaft, gear plane
   // a closed black box, opened up while Steering is picked
   pSteerBox.add(put(mk(extrudeTop(roundRectPts(SB.motorX - 0.6, -1.25, RACK.x + 0.25, 1.25, 0.25), 1.35, 0.05), M.housing, 'steering', { cutaway: 'steering' }), 0, SB.y - 0.2, 0));
@@ -436,7 +437,7 @@ export function buildCar(scene: THREE.Scene): Car {
   const sPinion = put(mk(gearGeo(STEER_TEETH.pinion, STEER_MODULE, 0.26, { hole: 0.05 }).rotateX(-Math.PI / 2), MAT.nylon, 'steering'), SB.x, RACK.y, 0);
   pSteerBox.add(sMotor, sBig, sPinion, put(mk(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 8), MAT.steel, 'steering'), SB.x, SB.y + 0.2, 0));
 
-  const pRack = piece('steering', sprung, V(5.5, 3.2, 0), true);
+  const pRack = piece('rack', sprung, V(5.5, 3.2, 0), true);
   {
     const p = Math.PI * STEER_MODULE, teeth: THREE.BufferGeometry[] = [];
     for (let k = -5; k <= 4; k++) teeth.push(box(0.16, 0.26, p * 0.45).translate(RACK.x - 0.21, RACK.y, (k + 0.5) * p)); // stays inside the nose block at full lock
@@ -449,13 +450,13 @@ export function buildCar(scene: THREE.Scene): Car {
   const tieRods: TieRod[] = [], knuckles: Piece[] = [];
   const HOOK = cylZ(0.035, 0.3, 6).translate(0, 0, -0.1); // the rod's 90° bent ends, upright once linked
   for (const s of SIDES) {
-    const tr = piece('steering', sprung, V(3, 2, s * 2.5), true);
+    const tr = piece('tieRods', sprung, V(3, 2, s * 2.5), true);
     tr.add(mk(new THREE.CylinderGeometry(0.035, 0.035, 1, 6).translate(0, 0.5, 0), MAT.steel, 'steering'));
     // a Z-bend: the knuckle end hooks up through the steering arm and the rack end down, mirrored left to right
     const ends = [0, 1].map((y) => { const m = mk(HOOK, MAT.steel, 'steering'); m.position.y = y; m.scale.z = y ? s : -s; tr.add(m); return m; });
     tieRods.push({ group: tr, ends });
     // black knuckle on a vertical Phillips kingpin, white plastic stub axle, steering arm facing rearward
-    const kn = piece('steering', sprung, V(0, 0.5, s * 3.5), true);
+    const kn = piece('knuckles', sprung, V(0, 0.5, s * 3.5), true);
     kn.add(put(mk(box(0.6, 1.0, 0.45), M.plastic, 'steering'), 0, 0.05, 0));
     kn.add(put(mk(cylZ(0.2, 1.0, 12), MAT.white, 'steering'), 0, 0, s * 0.6));
     kn.add(put(mk(box(STEER_ARM + 0.2, 0.18, 0.3), M.plastic, 'steering'), -STEER_ARM / 2, KNUCKLE.armY, 0));
@@ -469,8 +470,8 @@ export function buildCar(scene: THREE.Scene): Car {
   // eyes: the fronts' screws point forward; the rears' point outboard, along z
   const EYE_X = new THREE.TorusGeometry(0.17, 0.07, 8, 16).rotateY(Math.PI / 2), EYE_Z = new THREE.TorusGeometry(0.17, 0.07, 8, 16);
   const EYE_SCREW = (n: THREE.Vector3) => screwHeads([[n.clone().multiplyScalar(0.1), n]], 0.14);
-  const makeShock = (ex: THREE.Vector3, eyeAxis: THREE.Vector3): Shock => {
-    const g = piece('suspension', sprung, ex, true), EYE = eyeAxis.x ? EYE_X : EYE_Z, SCREW = EYE_SCREW(eyeAxis);
+  const makeShock = (comp: 'shocksF' | 'shocksR', ex: THREE.Vector3, eyeAxis: THREE.Vector3): Shock => {
+    const g = piece(comp, sprung, ex, true), EYE = eyeAxis.x ? EYE_X : EYE_Z, SCREW = EYE_SCREW(eyeAxis);
     const part = (geo: THREE.BufferGeometry, mat: () => StdMat) => { const m = mk(geo, mat, 'suspension'); g.add(m); return m; };
     part(EYE, M.plastic); part(SCREW, M.screw);
     part(new THREE.CylinderGeometry(0.34, 0.34, 0.2, 18).translate(0, -0.25, 0), M.plastic); // cap and upper spring seat
@@ -480,9 +481,10 @@ export function buildCar(scene: THREE.Scene): Car {
     const seat = part(new THREE.CylinderGeometry(0.3, 0.36, 0.22, 18), M.plastic);
     const eye = part(EYE, M.plastic); eye.add(mk(SCREW, M.screw, 'suspension'));
     return {
-      group: g,
+      group: g, spring, length: SHOCK.extended,
       update(top, bottom) {
         const d = bottom.clone().sub(top), L = d.length();
+        this.length = L;
         g.position.copy(top); g.quaternion.setFromUnitVectors(DOWN, d.divideScalar(L));
         shaft.scale.y = Math.max(0.05, L - 1.85 - 0.2); spring.scale.y = Math.max(0.2, L - 0.35 - 0.36) / SPRING_LEN;
         seat.position.y = -(L - 0.25); eye.position.y = -L;
@@ -490,11 +492,11 @@ export function buildCar(scene: THREE.Scene): Car {
     };
   };
   const shocks: Record<Corner, Shock> = {
-    FL: makeShock(V(2, 4, -3.5), V(1, 0, 0)), FR: makeShock(V(2, 4, 3.5), V(1, 0, 0)), RL: makeShock(V(-2, 4.5, -3.5), V(0, 0, -1)), RR: makeShock(V(-2, 4.5, 3.5), V(0, 0, 1)),
+    FL: makeShock('shocksF', V(2, 4, -3.5), V(1, 0, 0)), FR: makeShock('shocksF', V(2, 4, 3.5), V(1, 0, 0)), RL: makeShock('shocksR', V(-2, 4.5, -3.5), V(0, 0, -1)), RR: makeShock('shocksR', V(-2, 4.5, 3.5), V(0, 0, 1)),
   };
   const LOWER_ARM = armGeo(1.7, 1.0);
   const arms: Arm[] = SIDES.map((s) => {
-    const lower = piece('suspension', sprung, V(0, -0.3, s * 2.2), true); lower.add(mk(LOWER_ARM, M.plastic, 'suspension'));
+    const lower = piece('arms', sprung, V(0, -0.3, s * 2.2), true); lower.add(mk(LOWER_ARM, M.plastic, 'suspension'));
     return { side: s, lower };
   });
   for (const s of SIDES) pChassis.add(put(mk(cylX(0.12, 1.9, 10), MAT.steel, 'chassis'), FRONT_PIVOT(s).x, FRONT_PIVOT(s).y, FRONT_PIVOT(s).z)); // arm hinge pins
@@ -507,7 +509,7 @@ export function buildCar(scene: THREE.Scene): Car {
    * gearbox wrapping round behind the tyres' upper halves (photos 21, 22). No photo shows how the wing is fixed, but
    * its feet sit on the gearbox, so it is carried on the rear drive unit and moves with it.
    */
-  const pWing = piece('chassis', ru, V(-2.5, 2.5, 0));
+  const pWing = piece('wing', ru, V(-2.5, 2.5, 0));
   const wing = new THREE.Group(); pWing.add(wing);
   {
     const w = (geo: THREE.BufferGeometry, mat = M.plastic) => wing.add(mk(geo, mat, 'chassis'));
@@ -571,12 +573,12 @@ export function buildCar(scene: THREE.Scene): Car {
     arm.add(put(mk(box(0.32, 0.4, 1.7), MAT.copper, 'motor'), 0.29, 0, MZ + 1.0));
   }
   for (let i = 0; i < 3; i++) rotor.add(put(mk(new THREE.CylinderGeometry(0.24, 0.24, 0.32, 8, 1, false, (i / 3) * TAU + 0.12, TAU / 3 - 0.24).rotateX(Math.PI / 2), MAT.copper, 'motor'), 0, 0, MZ + 1.95)); // commutator
-  rotor.add(put(mk(gearGeo(DRIVE_TEETH.pinion, MODULE, 0.28, { hole: 0.04 }), MAT.brass, 'gears'), 0, 0, GEAR_Z.pinion)); // pinion on the motor's inner end
+  rotor.add(put(mk(gearGeo(DRIVE_TEETH.pinion, MODULE, 0.28, { hole: 0.04 }), MAT.brass, 'gears', { comp: 'gears' }), 0, 0, GEAR_Z.pinion)); // pinion on the motor's inner end
   for (const dy of [-0.34, 0.34]) pMotor.add(put(mk(box(0.14, 0.16, 0.26), () => new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6 }), 'motor'), MOTOR.x, MOTOR.y + dy, MZ + 1.95)); // brushes
 
   const pGear1 = piece('gears', ru, V(0, 2, -4));
   const pAxle = piece('gears', ru, V(0, 0, 0));
-  const pGearCase = piece('gears', ru, V(-1, 3, -8.5));
+  const pGearCase = piece('gearbox', ru, V(-1, 3, -8.5));
   const g1a = put(mk(gearGeo(DRIVE_TEETH.g1Big, MODULE, 0.26, { hole: 0.06, windows: 4 }), MAT.nylon, 'gears'), G1.x, G1.y, GEAR_Z.pinion);
   const g1b = put(mk(gearGeo(DRIVE_TEETH.g1Small, MODULE, 0.3, { hole: 0.06 }), MAT.nylon, 'gears'), G1.x, G1.y, GEAR_Z.final);
   pGear1.add(g1a, g1b, put(mk(cylZ(0.06, 1.0, 8), MAT.steel, 'gears'), G1.x, G1.y, (GEAR_Z.pinion + GEAR_Z.final) / 2));
@@ -618,7 +620,7 @@ export function buildCar(scene: THREE.Scene): Car {
   })();
   const SCREW = screwHeads([[V(0, 0, TYRE_W / 2 - 0.33), V(0, 0, 1)]], 0.2); // on the rim face
   const makeWheel = (front: boolean, side: -1 | 1): Wheel => {
-    const outer = piece('wheels', root, V(0, 0, side * 7), true);
+    const outer = piece(front ? 'wheelsF' : 'wheelsR', root, V(0, 0, side * 7), true);
     const spin = new THREE.Group(); outer.add(spin);
     spin.add(mk(TYRE, M.tyre, 'wheels'));
     spin.add(mk(RIM_BARREL, () => new THREE.MeshStandardMaterial({ color: 0x030304, roughness: 0.95, metalness: 0, envMapIntensity: 0.05, side: THREE.DoubleSide }), 'wheels')); // dark matte, so the openings read deep
@@ -644,7 +646,7 @@ export function buildCar(scene: THREE.Scene): Car {
   const wire = (pts: [number, number, number][], mat: () => THREE.MeshStandardMaterial, circuit: Circuit, dir: 1 | -1, r = 0.065, parent: Piece = pWires) => {
     const tex = flowTex.clone(); tex.needsUpdate = true; tex.repeat.set(6, 1);
     const mesh = mk(tube(v3(pts), r, 60, 6), () => { const mt = mat(); mt.emissive = new THREE.Color(0xffd27a); mt.emissiveMap = tex; mt.emissiveIntensity = 0; return mt; }, 'wires', { cast: false });
-    markWire(mesh, circuit); parent.add(mesh); wires.push({ mesh, tex, circuit, dir });
+    parent.add(mesh); wires.push({ mesh, tex, circuit, dir });
   };
   // battery: from the plug's mate up through the bay floor to the board
   for (const [dz, m, dir] of [[0.08, MAT.redWire, 1], [-0.08, MAT.blackWire, -1]] as const)

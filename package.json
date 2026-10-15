@@ -2,7 +2,7 @@
   "name": "shuttle08-workshop",
   "version": "1.0.0",
   "private": true,
-  "description": "Interactive 3D model of a 1:16 toy RC buggy for kids: drive it, take it apart, see how it works.",
+  "description": "Interactive 3D teardown of a 1:16 toy RC buggy: watch it drive on rough ground, light up or remove any component, take it apart.",
   "type": "module",
   "scripts": {
     "dev": "vite",

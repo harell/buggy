@@ -12,7 +12,7 @@ export interface Stage {
   /** Narrow screens need the camera further back. */
   fitK(): number;
   resize(w: number, h: number): void;
-  /** Slide the picture left by this many pixels, so what the camera looks at sits clear of a panel on the right. */
+  /** Slide the picture right by this many pixels, so what the camera looks at sits clear of a panel on the left. */
   setShift(px: number): void;
   /** Keep the shadow-casting light over whatever the camera looks at. */
   followTarget(): void;
@@ -55,7 +55,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   let size = { w: 1, h: 1 }, shift = 0;
   const applyShift = () => {
     if (Math.abs(shift) < 0.5) camera.clearViewOffset();
-    else camera.setViewOffset(size.w, size.h, shift, 0, size.w, size.h);
+    else camera.setViewOffset(size.w, size.h, -shift, 0, size.w, size.h);
   };
   return {
     renderer, scene, camera, controls, sun, home, fitK,

@@ -3,62 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Interactive 3D model of a 1:16 RC buggy for a grown-up and a child to explore together: point at a part, follow the energy from the battery to the wheels, and see how the motor, gears, steering and springs work.">
-<title>Shuttle 08 Workshop</title>
+<meta name="description" content="Interactive 3D teardown of a 1:16 RC buggy: watch it drive over rough ground, light up or take off any component or assembly, and pull the car apart without a screwdriver.">
+<title>Shuttle 08 Teardown</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='22' width='44' height='16' rx='5' fill='%231c5fe0'/%3E%3Ccircle cx='18' cy='42' r='9' fill='%23152238'/%3E%3Ccircle cx='46' cy='42' r='9' fill='%23152238'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,600;0,700;1,700&family=Nunito:wght@500;600;700;800&display=swap">
 </head>
 <body>
-<main class="bay" id="bay" tabindex="-1">
-  <canvas id="car" aria-label="3D model of the buggy on a bumpy track. Drag to rotate, scroll to zoom, click a part to look closer."></canvas>
+<main class="bay" id="bay">
+  <canvas id="car" aria-label="3D model of the buggy driving over rough ground. Drag to rotate, scroll to zoom, click a part to light it up."></canvas>
   <div class="labels" id="labels"></div>
 
-  <div class="tl">
-    <div class="row">
-      <button class="pill" id="b-questions" aria-expanded="false" aria-controls="questions">? Questions <kbd>Q</kbd></button>
-      <button class="pill" id="b-walk" aria-expanded="false" aria-controls="walks">Walk <kbd>G</kbd></button>
-    </div>
-    <div class="panel qlist" id="questions" hidden></div>
-    <div class="panel walklist" id="walks" hidden></div>
-    <div id="backchip"></div>
-  </div>
+  <aside class="tree glass" id="tree" aria-label="Components">
+    <header class="tree-head">
+      <span class="brand">SHUTTLE <b>08</b></span>
+      <span class="tools">
+        <button class="mini" id="b-reset" title="Everything back on the car, nothing lit up">Reset</button>
+        <button class="mini" id="b-tree" aria-expanded="true" aria-controls="tree-body">Parts</button>
+      </span>
+    </header>
+    <div id="tree-body"><div id="assemblies"></div></div>
+  </aside>
 
-  <nav class="crumbs glass" id="crumbs" aria-label="Where you are"></nav>
-  <div class="steps glass" id="steps" hidden></div>
+  <nav class="views glass" aria-label="Viewpoint">
+    <button data-view="threeq" aria-pressed="true">3/4</button>
+    <button data-view="side">Side</button>
+    <button data-view="front">Front</button>
+    <button data-view="rear">Rear</button>
+    <button data-view="top">Top</button>
+  </nav>
 
-  <aside class="notes glass" id="notes" aria-live="polite"></aside>
-  <div class="bigcap glass" id="bigcap" hidden></div>
-  <div class="caption glass" id="caption" hidden></div>
-  <div class="endcard glass" id="endcard" hidden></div>
-
-  <section class="remote-dock" aria-label="Remote control">
-    <canvas id="remote" aria-label="Remote control. Drag the wheel to steer, hold the trigger to drive, push it away to reverse, press the plus button for the lights."></canvas>
-    <button class="run" id="b-run">Hold · Drive</button>
+  <section class="dock glass" aria-label="Motion and teardown">
+    <button class="tog" id="b-go" aria-pressed="true" title="Drive forward, or stop">Driving</button>
+    <button class="tog" id="b-weave" aria-pressed="false" title="Steer full left and right in turn">Weave</button>
+    <button class="tog" id="b-rough" aria-pressed="true" title="Rough ground or a smooth track">Rough ground</button>
+    <button class="tog" id="b-lock" aria-pressed="false" title="Bolt the body to the wheels, as if there were no springs">Springs locked</button>
+    <button class="tog" id="b-slow" aria-pressed="false" title="Slow everything down">Slow-mo</button>
+    <button class="tog" id="b-trace" aria-pressed="false" title="Graph one front wheel's bumps against the body above it">Ride trace</button>
+    <label class="apart"><span>Together</span><input type="range" id="explode" min="0" max="100" value="0" aria-label="Take the car apart"><span>Apart</span></label>
   </section>
 
-  <footer class="corner">
-    <span class="brand">SHUTTLE <b>08</b></span>
-    <button class="mini" id="b-child" aria-pressed="false" title="Hide the notes and show one big question (N)">Child view <kbd>N</kbd></button>
-    <button class="mini" id="b-sound" aria-pressed="true">Sound</button>
-    <button class="mini" id="b-keys" aria-expanded="false" aria-controls="keys">Keys</button>
-  </footer>
-  <div class="panel keys" id="keys" hidden>
-    <h2>Keyboard</h2>
-    <dl>
-      <dt>Click a dot, or <kbd>1</kbd>–<kbd>7</kbd></dt><dd>Look at a part</dd>
-      <dt><kbd>PgDn</kbd> <kbd>PgUp</kbd></dt><dd>Next or previous part along the chain (a presentation clicker sends these)</dd>
-      <dt><kbd>Esc</kbd></dt><dd>Back out to the whole car</dd>
-      <dt><kbd>Space</kbd></dt><dd>Hold to run what you're looking at</dd>
-      <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></dt><dd>Drive and steer</dd>
-      <dt><kbd>Q</kbd> / <kbd>G</kbd></dt><dd>Questions / walks</dd>
-      <dt><kbd>W</kbd></dt><dd>Show the what-if</dd>
-      <dt><kbd>A</kbd></dt><dd>Show the answer</dd>
-      <dt><kbd>H</kbd> / <kbd>N</kbd></dt><dd>Fold the notes / child view</dd>
-      <dt><kbd>E</kbd> / <kbd>L</kbd></dt><dd>Take apart / lights</dd>
-      <dt>In a walk</dt><dd><kbd>→</kbd> or <kbd>PgDn</kbd> question, answer, next · <kbd>B</kbd> or <kbd>.</kbd> run · <kbd>Backspace</kbd> back to the walk</dd>
-    </dl>
+  <div class="ride glass" id="ride" hidden>
+    <canvas id="ride-c" aria-label="Graph of the front-left wheel's bumps compared with the body above it"></canvas>
+    <div class="key"><span><i style="background:var(--glow)"></i>Wheel</span><span><i style="background:var(--blue)"></i>Body</span><span id="ride-feel"></span></div>
   </div>
 </main>
 <script type="module" src="./src/main.ts"></script>

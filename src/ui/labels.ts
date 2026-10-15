@@ -1,77 +1,70 @@
 import * as THREE from 'three';
-import { PART_ORDER, type PartKey } from '../core/catalog';
-import { R } from '../core/dims';
+import { COMP_ORDER, COMPS, type CompKey } from '../core/components';
 import { resolveOverlaps } from '../core/layout';
-import { isShown, PARTS } from '../model/parts';
-import type { Car } from '../model/car';
+import { allMeshes, compOf, isShown, type PartMesh } from '../model/parts';
 
-interface Anchor { obj: THREE.Object3D; local: THREE.Vector3; visible: () => boolean }
+interface Anchor { obj: THREE.Object3D; local: THREE.Vector3 }
 interface LabelEl { el: HTMLButtonElement; x: number; y: number; live: boolean }
 
+/** The piece a mesh hangs from: it moves with the car but never spins, so a tag on it stays steady. */
+function pieceOf(m: THREE.Object3D): THREE.Object3D {
+  for (let n: THREE.Object3D | null = m; n; n = n.parent) if ((n.userData as { ex?: unknown }).ex) return n;
+  return m;
+}
+
 /**
- * Name tags over parts. Each hangs from a point fixed to a part that doesn't spin, is smoothed on
- * screen, and is laid out in a fixed order, so tags stay steady while the car moves.
+ * Name tags over components. Each hangs from a point above the component's biggest mesh on its side nearest the
+ * default camera, is smoothed on screen, and is laid out in a fixed order, so tags stay steady while the car moves.
  */
 export class LabelLayer {
-  private labels = {} as Record<PartKey, LabelEl>;
-  private anchors: Record<PartKey, Anchor> | null = null;
+  private labels = {} as Record<CompKey, LabelEl>;
+  private anchors = new Map<CompKey, Anchor | null>();
 
-  constructor(container: HTMLElement, onPick: (k: PartKey) => void) {
-    for (const k of PART_ORDER) {
+  constructor(container: HTMLElement, onPick: (k: CompKey) => void) {
+    for (const k of COMP_ORDER) {
       const el = document.createElement('button');
-      el.className = 'label'; el.textContent = PARTS[k].chip; el.hidden = true;
+      el.className = 'label'; el.textContent = COMPS[k].name; el.hidden = true;
       el.onclick = () => onPick(k);
       container.append(el);
       this.labels[k] = { el, x: 0, y: 0, live: false };
     }
   }
 
-  setSelected(sel: PartKey | null, seen: ReadonlySet<PartKey> = new Set()): void {
-    for (const k of PART_ORDER) {
-      this.labels[k].el.classList.toggle('sel', k === sel);
-      this.labels[k].el.classList.toggle('seen', k !== sel && seen.has(k));
+  private anchor(k: CompKey): Anchor | null {
+    if (this.anchors.has(k)) return this.anchors.get(k)!;
+    let best: PartMesh | null = null, score = -Infinity;
+    const c = new THREE.Vector3(), b = new THREE.Box3();
+    for (const m of allMeshes) {
+      if (compOf(m) !== k) continue;
+      b.setFromObject(m); if (b.isEmpty()) continue;
+      const s = b.getSize(c).length() + b.getCenter(c).z * 0.5; // big, and on the camera's (+z) side
+      if (s > score) { score = s; best = m; }
     }
+    let a: Anchor | null = null;
+    if (best) {
+      const obj = pieceOf(best);
+      b.setFromObject(best); b.getCenter(c); c.y = b.max.y + 0.4;
+      a = { obj, local: obj.worldToLocal(c.clone()) };
+    }
+    this.anchors.set(k, a);
+    return a;
   }
 
-  /** Call after the car is posed for the first time. */
-  private buildAnchors(car: Car): Record<PartKey, Anchor> {
-    const top = (obj: THREE.Object3D, mesh: THREE.Object3D): Anchor => {
-      const b = new THREE.Box3().setFromObject(mesh), c = b.getCenter(new THREE.Vector3());
-      c.y = b.max.y + 0.4;
-      return { obj, local: obj.worldToLocal(c), visible: () => true };
-    };
-    const p = car.pieces;
-    return {
-      motor: top(p.motor, car.motorCan),
-      gears: top(p.gear1, p.gearCase.children[0]),
-      battery: top(p.battery, p.battery.children[0]),
-      board: top(p.board, p.board.children[0]),
-      steering: top(p.steerBox, p.steerBox.children[0]),
-      suspension: { obj: car.shocks.FR.group, local: new THREE.Vector3(0, 0.7, 0), visible: () => true },
-      wheels: { obj: car.wheels.FR.outer, local: new THREE.Vector3(0, R + 0.5, 0), visible: () => true },
-      lights: top(p.lights, p.lights.children[0]),
-      wires: { ...top(p.wires, car.wires[2].mesh), visible: () => car.wires[0].mesh.visible },
-      chassis: top(p.chassis, p.chassis.children[0]),
-      body: top(p.body, car.anchors.roof),
-    };
-  }
-
-  /** `shown` says which tags to draw: all of them while the car is apart, the hotspots on the whole car, else none. */
-  update(car: Car, camera: THREE.Camera, w: number, h: number, shown: (k: PartKey) => boolean, selected: PartKey | null, dt: number): void {
-    this.anchors ??= this.buildAnchors(car);
-    const smooth = 1 - Math.exp(-dt * 14);
-    const order = selected ? [selected, ...PART_ORDER.filter((k) => k !== selected)] : PART_ORDER;
+  /** Draw the tags for `shown` components; `first` wins overlaps. Call after the car is posed. */
+  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number): void {
+    const smooth = 1 - Math.exp(-dt * 14), on = new Set(shown);
     const placed: { L: LabelEl; w: number; h: number }[] = [];
-    for (const k of order) {
-      const L = this.labels[k], A = this.anchors[k];
-      const hide = () => { L.el.hidden = true; L.live = false; };
-      if (!shown(k) || !isShown(A.obj) || !A.visible()) { hide(); continue; }
+    for (const k of [...shown, ...COMP_ORDER.filter((x) => !on.has(x))]) {
+      const L = this.labels[k];
+      const hide = () => { if (!L.el.hidden) L.el.hidden = true; L.live = false; };
+      const A = on.has(k) ? this.anchor(k) : null;
+      if (!A || !isShown(A.obj)) { hide(); continue; }
       const p = A.obj.localToWorld(A.local.clone()).project(camera);
       if (p.z > 1) { hide(); continue; }
       const tx = ((p.x + 1) / 2) * w, ty = ((1 - p.y) / 2) * h;
       if (!L.live) { L.x = tx; L.y = ty; L.live = true; } else { L.x += (tx - L.x) * smooth; L.y += (ty - L.y) * smooth; }
       L.el.hidden = false;
-      placed.push({ L, w: L.el.offsetWidth || 70, h: L.el.offsetHeight || 24 });
+      placed.push({ L, w: L.el.offsetWidth || 90, h: L.el.offsetHeight || 24 });
     }
     const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })));
     placed.forEach(({ L }, i) => { L.el.style.transform = `translate(${Math.round(out[i].x)}px,${Math.round(out[i].y)}px) translate(-50%,-100%)`; });

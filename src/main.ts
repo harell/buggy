@@ -18,6 +18,8 @@ import { LabelLayer } from './ui/labels';
 import { RideGraph } from './ui/rideGraph';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** What pointing at something is called here: a tap on a touch screen, a click with a mouse. */
+const TAP = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
 const bay = $('bay');
 const carCanvas = $<HTMLCanvasElement>('car');
 
@@ -81,8 +83,29 @@ $('shelf').addEventListener('click', (e) => {
   if (b) show(b.dataset.sys as SystemKey);
 });
 $('b-whole').onclick = () => show(null);
-// on a phone the shelf starts folded, so the car is what you see first
-if (innerWidth < 700) { $('shelf-body').hidden = true; $('b-shelf').setAttribute('aria-expanded', 'false'); }
+// on a phone the shelf gives way to one row of tabs, a family's colour on each, so switching never covers the car;
+// "Whole car", the way back, stays put while the systems scroll
+$('tabs').innerHTML = '<button class="tab whole" id="t-whole">Whole car</button><span class="sep" aria-hidden="true"></span><div class="tab-row" id="tab-row">'
+  + FAMILY_ORDER.map((f, i) => (i ? '<span class="sep" aria-hidden="true"></span>' : '') + SYSTEM_ORDER.filter((k) => SYSTEMS[k].family === f).map((k) =>
+    `<button class="tab ${f}" data-sys="${k}" title="${SYSTEMS[k].question}">${SYSTEMS[k].name}</button>`).join('')).join('') + '</div>';
+$('tabs').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('button');
+  if (b) show(b.id === 't-whole' ? null : b.dataset.sys as SystemKey);
+});
+/** Fade either end of a row that scrolls sideways while there is more of it to see that way. */
+const edgeFade = (el: HTMLElement) => {
+  const mark = () => {
+    el.classList.toggle('more-l', el.scrollLeft > 2);
+    el.classList.toggle('more-r', el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+  el.addEventListener('scroll', mark, { passive: true });
+  new ResizeObserver(mark).observe(el);
+  return mark;
+};
+const fadeTabs = edgeFade($('tab-row')), fadeChain = edgeFade($('chain'));
+/** Scroll a row sideways so `item` sits in its middle. */
+const centreIn = (row: HTMLElement, item: HTMLElement) =>
+  row.scrollTo({ left: item.offsetLeft - (row.clientWidth - item.offsetWidth) / 2, behavior: reduceMotion ? 'auto' : 'smooth' });
 $('b-shelf').onclick = () => {
   const open = $('shelf-body').hidden;
   $('shelf-body').hidden = !open; $('b-shelf').setAttribute('aria-expanded', String(open));
@@ -110,14 +133,15 @@ const CONTROL_TIPS: Record<Control, string> = {
 function renderDock() {
   const s = ui.system ? SYSTEMS[ui.system] : null;
   $('dock-head').innerHTML = s
-    ? `<span class="kind ${s.family}">${FAMILIES[s.family]}</span><b>${s.name}</b><span class="hint">Click a step, a part or its name tag to make it see-through</span>`
-    : '<b>The whole car</b><span class="hint">Pick a system, or click a part to see the system it works in</span>';
+    ? `<span class="kind ${s.family}">${FAMILIES[s.family]}</span><b>${s.name}</b><span class="hint">${TAP} a step, a part or its name tag to make it see-through</span><span class="hint-short">${TAP} a step or part to see through it</span>`
+    : `<b>The whole car</b><span class="hint">Pick a system, or ${TAP.toLowerCase()} a part to see the system it works in</span><span class="hint-short">${TAP} a part to find its system</span>`;
   $('chain').innerHTML = s ? s.stages.map((st, i) =>
     `${i ? '<span class="arr" aria-hidden="true">›</span>' : ''}<button class="step" data-step="${i}" aria-pressed="true" title="Make the ${st.name.toLowerCase()} see-through"><b>${st.name}</b><i class="f-${st.form}">${FORM[st.form]}</i></button>`).join('')
     + '<button class="mini" id="b-all" hidden>Show all</button>' : '';
   const ctl = s ? s.controls : ([['go', 'Driving'], ['rough', 'Rough ground']] as const);
   $('controls').innerHTML = [...ctl, ['slow', 'Slow-mo'] as const].map(([key, label]) =>
     `<button class="tog" data-ctl="${key}" aria-pressed="${ui[key]}" title="${key === 'slow' ? 'Slow everything down' : CONTROL_TIPS[key]}">${label}</button>`).join('');
+  $('chain').scrollLeft = 0; fadeChain();
 }
 $('chain').addEventListener('click', (e) => {
   const b = (e.target as Element).closest<HTMLElement>('button');
@@ -143,7 +167,11 @@ function toggleStep(i: number) {
 function pickPart(k: CompKey) {
   if (!ui.system) { const s = systemFor(k); if (s) show(s); return; }
   const i = stageOf(ui.system, k);
-  if (i >= 0) toggleStep(i);
+  if (i < 0) return;
+  toggleStep(i);
+  // bring its step into view, so a narrow chain shows what the tap changed
+  const step = $('chain').querySelector<HTMLElement>(`[data-step="${i}"]`);
+  if (step) centreIn($('chain'), step);
 }
 
 /** Bring the 3D view, the shelf and the chain in line with the state. */
@@ -152,6 +180,9 @@ function refresh() {
   applyView({ spot: ui.spot, removed: new Set() });
   for (const b of document.querySelectorAll<HTMLElement>('[data-sys]')) b.setAttribute('aria-pressed', String(b.dataset.sys === ui.system));
   $('b-whole').toggleAttribute('disabled', !ui.system);
+  $('t-whole').setAttribute('aria-pressed', String(!ui.system));
+  const tab = $('tab-row').querySelector<HTMLElement>('[aria-pressed="true"]');
+  if (tab && $('tabs').offsetParent) { centreIn($('tab-row'), tab); fadeTabs(); }
   if (!ui.system) return;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-step]')) {
     const i = Number(b.dataset.step), on = !ui.hidden.has(i);
@@ -169,8 +200,9 @@ function pickComp(cx: number, cy: number): CompKey | null {
   ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(allMeshes.filter((m) => isShown(m)), false);
-  // a part of the system on show wins over what is in front of it, so see-through steps can be clicked back
-  const mine = ui.system ? hits.find((x) => stageOf(ui.system!, compOf(x.object as PartMesh)) >= 0) : undefined;
+  // a part of the system on show wins over what is in front of it, so see-through steps can be clicked back; on the whole
+  // car, a part that works in some system wins over the panels around it, so a tap on the car always opens something
+  const mine = hits.find((x) => { const k = compOf(x.object as PartMesh); return ui.system ? stageOf(ui.system, k) >= 0 : !!systemFor(k); });
   const h = mine ?? hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
   return h ? compOf(h.object as PartMesh) : null;
 }
@@ -196,6 +228,7 @@ const labels = new LabelLayer($('labels'), pickPart);
 const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ride-feel'));
 
 /* ---------------- theme & size ---------------- */
+renderDock(); // first, so the dock has its height when the camera is fitted between the panels
 const theme = () => syncTheme(scene, ground.material);
 theme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -203,6 +236,27 @@ new MutationObserver(theme).observe(document.documentElement, { attributes: true
 const resize = () => stage.resize(bay.clientWidth, bay.clientHeight);
 new ResizeObserver(resize).observe(bay);
 resize();
+// turning a phone round changes the picture's shape a lot: once it settles, frame the system afresh
+let aspectFramed = bay.clientWidth / bay.clientHeight, reframeAt = 0;
+new ResizeObserver(() => {
+  clearTimeout(reframeAt);
+  reframeAt = window.setTimeout(() => {
+    const a = bay.clientWidth / bay.clientHeight;
+    if (Math.abs(Math.log(a / aspectFramed)) < 0.25) return;
+    aspectFramed = a; inset = panelInsets(); stage.setInsets(inset.t, inset.b); frame();
+  }, 250);
+}).observe(bay);
+// the panels are the app, not a page: a pinch on them should not zoom the page (Safari's own gesture event)
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+/** On a phone, the picture height taken by the tabs (and a full-width ride trace under them) above the car, and the dock below it (none elsewhere). */
+const tabs = $('tabs'), dock = $('dock'), rideBox = $('ride');
+const panelInsets = () => {
+  if (!tabs.offsetParent) return { t: 0, b: 0 };
+  const over = rideBox.offsetParent && rideBox.offsetWidth > bay.clientWidth / 2 ? rideBox : tabs;
+  return { t: over.offsetTop + over.offsetHeight, b: bay.clientHeight - dock.offsetTop };
+};
+let inset = panelInsets();
+stage.setInsets(inset.t, inset.b);
 camera.position.copy(stage.home.target).add(stage.home.pos.clone().sub(stage.home.target).multiplyScalar(stage.fitK()));
 void car.decalsReady.then(refresh);
 
@@ -239,21 +293,26 @@ function tick(now: number) {
     camera.position.lerpVectors(camTween.fP, camTween.tP, k);
     if (camTween.t >= 1) camTween = null;
   }
-  // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead)
-  const wide = bay.clientWidth > 900 && !shelfBody.hidden;
-  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : 0, Math.min(1, rdt * (reduceMotion ? 30 : 6)));
+  // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead),
+  // and on a phone, between the tabs above and the dock below
+  const follow = Math.min(1, rdt * (reduceMotion ? 30 : 6)), want = panelInsets();
+  // and on a phone on its side, left of the ride trace
+  const wide = bay.clientWidth > 900 && !shelfBody.hidden && shelf.offsetParent !== null;
+  const besideRide = tabs.offsetParent && rideBox.offsetParent && rideBox.offsetWidth < bay.clientWidth / 2;
+  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : besideRide ? -(rideBox.offsetWidth + 8) / 2 : 0, follow);
+  inset = { t: lerp(inset.t, want.t, follow), b: lerp(inset.b, want.b, follow) };
   stage.setShift(ui.shift);
+  stage.setInsets(inset.t, inset.b);
   orbit.update();
   stage.followTarget();
 
   car.root.updateMatrixWorld(true);
   const sys = ui.system ? systemComps(ui.system) : [];
-  labels.update(camera, bay.clientWidth, bay.clientHeight, sys, rdt, unlit(sys)); // chain order, so hiding a step never reshuffles the tags
+  labels.update(camera, bay.clientWidth, bay.clientHeight, sys, rdt, unlit(sys), want.t); // chain order, so hiding a step never reshuffles the tags
   rideGraph.draw(ride, ui.trace);
 
   stage.renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
-renderDock();
 refresh();
 requestAnimationFrame(tick);

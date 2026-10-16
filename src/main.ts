@@ -200,8 +200,9 @@ function pickComp(cx: number, cy: number): CompKey | null {
   ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(allMeshes.filter((m) => isShown(m)), false);
-  // a part of the system on show wins over what is in front of it, so see-through steps can be clicked back
-  const mine = ui.system ? hits.find((x) => stageOf(ui.system!, compOf(x.object as PartMesh)) >= 0) : undefined;
+  // a part of the system on show wins over what is in front of it, so see-through steps can be clicked back; on the whole
+  // car, a part that works in some system wins over the panels around it, so a tap on the car always opens something
+  const mine = hits.find((x) => { const k = compOf(x.object as PartMesh); return ui.system ? stageOf(ui.system, k) >= 0 : !!systemFor(k); });
   const h = mine ?? hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
   return h ? compOf(h.object as PartMesh) : null;
 }
@@ -295,8 +296,10 @@ function tick(now: number) {
   // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead),
   // and on a phone, between the tabs above and the dock below
   const follow = Math.min(1, rdt * (reduceMotion ? 30 : 6)), want = panelInsets();
+  // and on a phone on its side, left of the ride trace
   const wide = bay.clientWidth > 900 && !shelfBody.hidden && shelf.offsetParent !== null;
-  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : 0, follow);
+  const besideRide = tabs.offsetParent && rideBox.offsetParent && rideBox.offsetWidth < bay.clientWidth / 2;
+  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : besideRide ? -(rideBox.offsetWidth + 8) / 2 : 0, follow);
   inset = { t: lerp(inset.t, want.t, follow), b: lerp(inset.b, want.b, follow) };
   stage.setShift(ui.shift);
   stage.setInsets(inset.t, inset.b);

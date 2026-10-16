@@ -1,5 +1,5 @@
-/* Layout: the 3D bay fills the window and the car stays the subject. Left: the component tree. Top right: viewpoints.
-   Bottom: motion and teardown. Bottom right: the ride trace, when it is on. */
+/* Layout: the 3D bay fills the window and the car stays the subject. Left: the shelf of systems in three families.
+   Bottom: the picked system's chain, each step a toggle, and its own motion controls. Bottom right: the ride trace, when it is on. */
 :root{
   --bg:#edf1f6;
   --panel:#ffffff;
@@ -12,6 +12,8 @@
   --on-blue:#ffffff;
   --glow:#f27a12;
   --glow-soft:#fff0e2;
+  --mech:#56657b;
+  --mech-soft:#e7ecf2;
   --good:#1f8a4c;
   --bump:#1f8a57;
   --scene:#dde5ee;
@@ -25,13 +27,13 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0c121b; --panel:#131b27; --panel-2:#192333; --ink:#e6edf7; --muted:#97a6bc; --line:#253247;
-    --blue:#5590ff; --blue-soft:#1a2a47; --on-blue:#07101f; --glow:#ff9a45; --glow-soft:#3a2614; --good:#4cc283; --bump:#4cc283;
+    --blue:#5590ff; --blue-soft:#1a2a47; --on-blue:#07101f; --glow:#ff9a45; --glow-soft:#3a2614; --mech:#a7b4c6; --mech-soft:#1b2433; --good:#4cc283; --bump:#4cc283;
     --scene:#111925; --ground-tint:#77726c; --stage:#0f1621; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0c121b; --panel:#131b27; --panel-2:#192333; --ink:#e6edf7; --muted:#97a6bc; --line:#253247;
-  --blue:#5590ff; --blue-soft:#1a2a47; --on-blue:#07101f; --glow:#ff9a45; --glow-soft:#3a2614; --good:#4cc283; --bump:#4cc283;
+  --blue:#5590ff; --blue-soft:#1a2a47; --on-blue:#07101f; --glow:#ff9a45; --glow-soft:#3a2614; --mech:#a7b4c6; --mech-soft:#1b2433; --good:#4cc283; --bump:#4cc283;
   --scene:#111925; --ground-tint:#77726c; --stage:#0f1621; color-scheme:dark;
 }
 :root{color-scheme:light}
@@ -51,62 +53,76 @@ button:focus-visible,.label:focus-visible{outline:3px solid var(--glow);outline-
 .label{position:absolute;left:0;top:0;will-change:transform;transform:translate(-50%,-100%);pointer-events:auto;font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px 4px 22px;border-radius:999px;background:var(--glow);color:#1a0d00;border:1.5px solid var(--glow);box-shadow:0 2px 8px rgba(10,20,40,.2);cursor:pointer;white-space:nowrap}
 .label::before{content:"";position:absolute;left:7px;top:50%;width:9px;height:9px;margin-top:-4.5px;border-radius:50%;background:#fff}
 
-/* left: the component tree */
-.tree{position:absolute;left:var(--gap);top:var(--gap);z-index:4;width:236px;box-sizing:border-box;max-height:calc(100% - 2 * var(--gap) - 64px);display:flex;flex-direction:column;padding:10px 10px 8px;overflow:hidden}
-.tree-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 2px 6px}
+.label.off{background:var(--panel);color:var(--muted);border:1.5px dashed var(--muted);box-shadow:none;opacity:.85}
+.label.off::before{background:var(--muted)}
+
+/* family badges: electrical orange, mechanical slate, both split */
+.kind{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-display);font-weight:700;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.kind::before{content:"";width:8px;height:8px;border-radius:50%}
+.kind.elec{background:var(--glow-soft);color:var(--glow)} .kind.elec::before{background:var(--glow)}
+.kind.mech{background:var(--mech-soft);color:var(--mech)} .kind.mech::before{background:var(--mech)}
+.kind.both{background:linear-gradient(90deg,var(--glow-soft),var(--mech-soft));color:var(--ink)} .kind.both::before{background:linear-gradient(90deg,var(--glow) 50%,var(--mech) 50%)}
+
+/* left: the system shelf */
+.shelf{position:absolute;left:var(--gap);top:var(--gap);z-index:4;width:236px;box-sizing:border-box;max-height:calc(100% - 2 * var(--gap) - 110px);display:flex;flex-direction:column;padding:10px 10px 8px;overflow:hidden}
+.shelf-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 2px 6px}
 .brand{white-space:nowrap;font-family:var(--font-display);font-style:italic;font-weight:700;font-size:16px;letter-spacing:.04em;color:var(--ink)}
 .brand b{color:var(--blue)}
-#tree-body{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:5px}
 .tools{display:flex;gap:6px}
-#assemblies{display:flex;flex-direction:column;gap:5px}
-.asm-head{display:flex;align-items:center;border-top:1px solid var(--line);padding-top:4px}
-.asm-head .nm{font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.asm ul{list-style:none;margin:2px 0 0;padding:0}
-.asm li{display:flex;align-items:center}
-.nm{flex:1;text-align:left;border:0;background:none;border-radius:7px;padding:3px 8px;cursor:pointer;font-weight:700;font-size:13.5px;line-height:1.25}
-.nm:hover{background:var(--panel-2)}
-.nm[aria-pressed="true"]{background:var(--glow);color:#1a0d00}
-.asm-head .nm[aria-pressed="true"]{color:#1a0d00}
-.eye{flex:none;width:30px;height:24px;border:0;background:none;border-radius:8px;cursor:pointer;color:var(--muted);display:grid;place-items:center;padding:0}
-.eye:hover{background:var(--panel-2);color:var(--ink)}
-.eye svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
-.eye .slash{opacity:0}
-.eye[aria-pressed="true"]{color:var(--glow)}
-.eye[aria-pressed="true"] .slash{opacity:1}
-.asm li.off .nm{color:var(--muted);text-decoration:line-through}
-.mini{font-weight:800;font-size:12px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;cursor:pointer}
+#shelf-body{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:6px}
+.fam{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding-top:8px}
+.fam>.kind{align-self:flex-start;margin:0 0 2px 4px}
+.sys{text-align:left;border:1.5px solid transparent;background:none;border-radius:9px;padding:5px 9px;cursor:pointer;display:flex;flex-direction:column;gap:1px}
+.sys:hover{background:var(--panel-2)}
+.sys b{font-family:var(--font-display);font-size:15px}
+.sys span{font-size:12.5px;color:var(--muted);font-weight:700}
+.sys[aria-pressed="true"]{border-color:var(--ink);background:var(--panel-2)}
+.mini{font-weight:800;font-size:12px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+#b-shelf{display:none}
 .mini:disabled{opacity:.45;cursor:default}
 
-/* top right: viewpoints */
-.views{position:absolute;right:var(--gap);top:var(--gap);z-index:3;display:flex;gap:2px;padding:4px}
-.views button,.tog{font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;border:0;background:none;border-radius:8px;padding:7px 11px;cursor:pointer;white-space:nowrap}
-.views button:hover,.tog:hover{background:var(--panel-2)}
-.views button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
-
-/* bottom: motion and teardown */
-.dock{position:absolute;left:50%;bottom:var(--gap);transform:translateX(-50%);z-index:3;display:flex;align-items:center;gap:4px;padding:6px;max-width:calc(100% - 2 * var(--gap));overflow-x:auto}
-.tog{border:1.5px solid var(--line)}
+/* bottom: the chain of the system on show, then its motion controls */
+.dock{position:absolute;left:calc(var(--gap) + 236px + 12px);right:var(--gap);bottom:var(--gap);z-index:3;display:flex;flex-direction:column;gap:6px;padding:8px 10px}
+.dock-head{margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.dock-head b{font-family:var(--font-display);font-size:15px}
+.dock-head .hint{color:var(--muted);font-weight:700}
+.dock-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.chain{display:flex;align-items:center;gap:4px;overflow-x:auto;min-width:0;padding:2px}
+.arr{color:var(--muted);font-weight:800}
+.step{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;border:1.5px solid var(--ink);background:var(--panel);border-radius:10px;padding:4px 9px;cursor:pointer}
+.step b{font-family:var(--font-display);font-size:13.5px;white-space:nowrap}
+.step i{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:0 7px;border-radius:999px;white-space:nowrap}
+.step .f-stored{background:var(--panel-2);color:var(--ink)}
+.step .f-electric,.step .f-light,.step .f-spin{background:var(--glow-soft);color:var(--glow)}
+.step .f-movement{background:var(--mech-soft);color:var(--mech)}
+.step[aria-pressed="false"]{border-style:dashed;border-color:var(--muted);opacity:.55}
+.step[aria-pressed="false"] b{text-decoration:line-through}
+.step:disabled{cursor:not-allowed}
+.step:hover:not(:disabled){background:var(--panel-2)}
+.controls{display:flex;gap:4px;flex-wrap:wrap}
+.tog{font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;border:1.5px solid var(--line);background:none;border-radius:8px;padding:7px 11px;cursor:pointer;white-space:nowrap}
+.tog:hover{background:var(--panel-2)}
 .tog[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--on-blue)}
-.apart{display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;font-family:var(--font-display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
-.apart input{width:150px;accent-color:var(--glow)}
 
 /* bottom right: the ride trace */
-.ride{position:absolute;right:var(--gap);bottom:76px;z-index:3;width:260px;padding:10px 12px}
+.ride{position:absolute;right:var(--gap);bottom:124px;z-index:3;width:260px;padding:10px 12px}
 #ride-c{display:block;width:100%;height:84px}
 .ride .key{display:flex;gap:12px;font-size:12px;font-weight:800;color:var(--muted);margin-top:4px}
 .ride .key i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
 #ride-feel{margin-left:auto;color:var(--ink)}
 .nogl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
 
-/* smaller windows: the tree folds away, the dock scrolls */
+/* smaller windows: the shelf folds away, the dock spans the width */
 @media (max-width:900px),(max-height:620px){
   :root{--gap:10px}
-  .tree{width:220px}
-  .dock{left:var(--gap);right:var(--gap);transform:none;max-width:none}
-  .ride{bottom:70px;width:220px}
+  .shelf{width:220px;max-height:calc(100% - 2 * var(--gap) - 150px)}
+  .dock{left:var(--gap)}
+  #b-shelf{display:inline-block}
+  .ride{bottom:150px;width:220px}
 }
 @media (max-width:560px){
-  .tree{width:auto;max-width:calc(100% - 2 * var(--gap));max-height:calc(100% - 2 * var(--gap) - 110px)}
-  .views{top:auto;bottom:66px;right:var(--gap)}
+  .shelf{width:auto;max-width:calc(100% - 2 * var(--gap))}
+  .dock-head .hint{display:none}
+  .chain{flex-wrap:nowrap;width:100%}
   .ride{display:none}
 }

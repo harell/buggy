@@ -1,6 +1,6 @@
 # Shuttle 08 Teardown
 
-An interactive 3D teardown of a toy RC buggy. The car drives on rough ground the whole time, and you choose what to show: light up any component or set of components, take parts off the car, or pull the whole car apart. It is meant to replace a screwdriver when you want to show someone how the car is built and how its parts work together, in whatever order the conversation goes.
+An interactive 3D model of a toy RC buggy, shown as systems: sets of parts that work together. Pick one and the rest of the car turns see-through while the camera moves in. The systems are sorted by what happens to the energy in them: electrical (electricity in, no movement out), electrical + mechanical (electricity becomes movement) and mechanical (works with the battery out). It is meant for showing a child how the car works, in whatever order the conversation goes.
 
 **Live site:** https://harell.github.io/buggy/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
 
@@ -12,11 +12,11 @@ There are no keyboard shortcuts and no script: every control is on screen.
 
 | Area | How it works |
 | --- | --- |
-| Parts (left) | Twenty components in five sets: body and frame, suspension, drivetrain, steering and electrics. Click a name to light it up: it stays solid and everything else turns see-through. Click more names to light up several, or click a set's heading to light up the whole set. The eye takes a component (or a whole set) off the car, and clicking it again puts it back. A covered part opens its cover when it is lit up: the gearbox for the gears and motor, the motor can for its rotor, the tub lid for the receiver. Hover a name for one line of facts. **Reset** puts everything back. Clicking a part in 3D, or its name tag, lights it up or turns it off. |
-| Viewpoints (top right) | 3/4, Side, Front, Rear and Top. Side is low, at wheel height: the view for watching the shocks against the frame. The camera frames whatever is lit up, and you can drag to orbit and scroll to zoom. |
-| Motion (bottom) | **Driving** (on from the start): the car drives forward by itself. **Weave** steers full left and right in turn, so the steering works. **Rough ground** switches between gravel and a smooth track. **Springs locked** bolts the body to the wheels, for comparing with working springs on the same ground. **Slow-mo** slows everything down. **Ride trace** graphs the front-left wheel's bumps against the body above it. |
-| Together ↔ Apart | Spreads the parts out into an exploded view. While the car is apart it sits on a stand: the wheels, motor and gears keep turning, but the springs rest. |
-| Springs | Each spring glows orange as it is squeezed, while the shocks are shown solid. |
+| Systems (left) | Six systems in three families. **Electrical:** Power (battery, wires, brain) and Lights. **Electrical + mechanical:** Go (battery to back wheels through the drive motor and gears) and Turn (battery to front wheels through the steering motor and rack). **Mechanical:** Roll (wheels, axle, gears and the motor they turn) and Bounce (springs, arms, rear axle, wheels). Picking one lights up its parts, ghosts the rest of the car, and moves the camera to that system's own viewpoint. Picking it again re-frames it. **Whole car** shows everything solid. The app opens on Go. |
+| Chain (bottom) | The picked system's parts as a chain of steps, each tagged with the form its energy is in (stored, electric, spin, movement). Click a step to make it see-through, and again to bring it back. Clicking a part of the system in 3D, or its name tag, does the same; the tags of see-through parts stay, faded and dashed, so they can be clicked back. The last solid step can't be hidden. **Show all** brings every step back. From the whole car, clicking a part opens the system it works in. |
+| Motion (bottom right) | Each system shows only its own controls: Go has Driving and Reverse, Turn has Left and right, Bounce has Rough ground, Lock the springs and Ride trace, Lights has Lights on, Roll has Push it. Slow-mo is always there. Picking a system resets the motion to how it starts. |
+| Springs | In Bounce, each spring glows orange as it is squeezed. |
+
 ## Development
 
 Built with TypeScript, [Three.js](https://threejs.org/) (from npm), [Vite](https://vitejs.dev/) and [Vitest](https://vitest.dev/). Needs Node 20 or newer.
@@ -38,9 +38,9 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 
 | Folder | What lives there | Tested |
 | --- | --- | --- |
-| `src/core/` | Pure logic: dimensions, terrain height field, driving model, suspension, gear and rack kinematics, ride meter, label layout, parts and the bench's components and sets (`components.ts`) | Yes, `tests/*.test.ts` |
+| `src/core/` | Pure logic: dimensions, terrain height field, driving model, suspension, gear and rack kinematics, ride meter, label layout, parts, components (`components.ts`) and the six systems with their chains (`systems.ts`) | Yes, `tests/*.test.ts` |
 | `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (which component each mesh belongs to, lighting up, removing, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
-| `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the car clear of the parts panel), the moving ground, posing the car each frame (including the spring glow) | Visually |
+| `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the car clear of the systems shelf), the moving ground, posing the car each frame (including the spring glow) | Visually |
 | `src/ui/` | DOM pieces: name tags and the ride trace | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |
 

@@ -1,6 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
-import { ASSEMBLIES, ASSEMBLY_ORDER, COMP_ORDER, COMPS, type AssemblyKey, type CompKey } from './core/components';
+import { COMPS, type CompKey } from './core/components';
+import { canHide, FAMILIES, FAMILY_ORDER, litComps, stageOf, SYSTEM_ORDER, systemComps, systemFor, SYSTEMS, type Control, type Form, type SystemKey } from './core/systems';
 import { bodyHeightAt, createBody, stepSuspension, type CornerBumps } from './core/suspension';
 import { CORNERS, TZ, XF } from './core/dims';
 import { clamp, ease, frameStep, lerp } from './core/math';
@@ -8,7 +9,7 @@ import { RideMeter } from './core/ride';
 import { groundHeight } from './core/terrain';
 import { createDrive, stepDrive, wheelWorld } from './core/vehicle';
 import { buildCar } from './model/car';
-import { allMeshes, applyView, compOf, compRemoved, compSolid, GHOST, isShown, quietShadows, setApart } from './model/parts';
+import { allMeshes, applyView, compOf, compSolid, GHOST, isShown, quietShadows, type PartMesh } from './model/parts';
 import { poseCar } from './scene/carMotion';
 import { createGround } from './scene/ground';
 import { createStage, syncTheme, type Stage } from './scene/stage';
@@ -37,123 +38,129 @@ quietShadows(0.3, [car.pieces.gear1, car.driveGears.fg, car.driveGears.axle, car
 const drive = createDrive();
 const body = createBody();
 const ride = new RideMeter();
+/** Motion state a system starts from: driving forward on rough ground with the lights on. */
+const MOTION: Record<Control, boolean> = { go: true, reverse: false, weave: false, rough: true, locked: false, trace: false, lights: true };
 const ui = {
-  /** The car drives forward on its own; nobody has to hold anything. */
-  go: true, weave: false, rough: true, locked: false, slow: false, trace: false,
-  explodeT: 0, explode: 0, timeScale: 1, weaveClock: 0, shift: 0,
-  spot: new Set<CompKey>(), removed: new Set<CompKey>(),
+  ...MOTION, slow: false, timeScale: 1, weaveClock: 0, shift: 0,
+  /** The system on show (null: the whole car, solid), and the steps of its chain made see-through. */
+  system: 'go' as SystemKey | null, hidden: new Set<number>(),
+  spot: new Set<CompKey>(),
 };
-ground.rough = ui.rough; ground.reshape();
 
 // Dev server only (stripped from production builds): lets scripted screenshots set the camera and state.
-if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, drive, stage, refresh: () => refresh(true) } });
+if (import.meta.env.DEV) Object.assign(window, { __app: { THREE, scene, camera, orbit, car, ui, drive, stage, show } });
 
 /* ---------------- camera ---------------- */
-type ViewKey = 'threeq' | 'side' | 'front' | 'rear' | 'top';
-/** Directions the camera looks from, toward what it is framing. Side is low, at wheel height, for the suspension. */
-const VIEWS: Record<ViewKey, THREE.Vector3> = {
-  threeq: new THREE.Vector3(0.62, 0.38, 0.69), side: new THREE.Vector3(0, 0.05, 1), front: new THREE.Vector3(1, 0.22, 0.05),
-  rear: new THREE.Vector3(-1, 0.3, 0.05), top: new THREE.Vector3(0.02, 1, 0.01),
-};
 let camTween: { t: number; dur: number; fT: THREE.Vector3; tT: THREE.Vector3; fP: THREE.Vector3; tP: THREE.Vector3 } | null = null;
 orbit.addEventListener('start', () => { camTween = null; });
 const tweenTo = (target: THREE.Vector3, pos: THREE.Vector3) => {
   camTween = { t: 0, dur: reduceMotion ? 0.01 : 0.9, fT: orbit.target.clone(), tT: target, fP: camera.position.clone(), tP: pos };
 };
-const lookDir = () => camera.position.clone().sub(orbit.target).normalize();
-/** Frame what is lit up (or the whole car), from `dir`. */
-function frame(dir = lookDir()) {
-  car.root.updateMatrixWorld(true);
-  const b = new THREE.Box3();
-  for (const m of allMeshes) if (isShown(m) && m.material !== GHOST && compOf(m) !== 'wires' && (ui.spot.size === 0 || ui.spot.has(compOf(m)))) b.expandByObject(m);
-  if (b.isEmpty() || ui.spot.size === 0) {
-    const t = new THREE.Vector3(0, 4.6 + ui.explodeT * 5, 0);
-    tweenTo(t, t.clone().addScaledVector(dir, lerp(46, 64, ui.explodeT) * stage.fitK()));
+const HOME_VIEW = new THREE.Vector3(0.62, 0.38, 0.69).normalize();
+/** Frame the system on show, all of its steps, from its own viewpoint (or the whole car from the 3/4 view). */
+function frame() {
+  if (!ui.system) {
+    const t = new THREE.Vector3(0, 4.6, 0);
+    tweenTo(t, t.clone().addScaledVector(HOME_VIEW, 40 * stage.fitK()));
     return;
   }
+  car.root.updateMatrixWorld(true);
+  const b = new THREE.Box3(), comps = new Set(systemComps(ui.system));
+  for (const m of allMeshes) if (isShown(m) && compOf(m) !== 'wires' && comps.has(compOf(m))) b.expandByObject(m);
+  const dir = new THREE.Vector3(...SYSTEMS[ui.system].view).normalize();
   const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3()).length();
-  tweenTo(c, c.clone().addScaledVector(dir, clamp(size * 1.8, 16, 80) * stage.fitK()));
+  tweenTo(c, c.clone().addScaledVector(dir, clamp(size * 1.35, 14, 60) * stage.fitK()));
 }
-function setView(k: ViewKey) {
-  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === k));
-  frame(VIEWS[k].clone().normalize());
-}
-document.querySelector('.views')!.addEventListener('click', (e) => {
-  const b = (e.target as Element).closest<HTMLElement>('[data-view]');
-  if (b) setView(b.dataset.view as ViewKey);
-});
 
-/* ---------------- the component tree ---------------- */
-const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg>';
-const row = (k: CompKey) =>
-  `<li><button class="nm" data-spot="${k}" title="${COMPS[k].spec}">${COMPS[k].name}</button><button class="eye" data-rm="${k}" aria-label="Take ${COMPS[k].name} off the car">${EYE}</button></li>`;
-$('assemblies').innerHTML = ASSEMBLY_ORDER.map((a) =>
-  `<section class="asm"><div class="asm-head"><button class="nm" data-spot-asm="${a}">${ASSEMBLIES[a].name}</button><button class="eye" data-rm-asm="${a}" aria-label="Take the whole ${ASSEMBLIES[a].name.toLowerCase()} off the car">${EYE}</button></div><ul>${ASSEMBLIES[a].comps.map(row).join('')}</ul></section>`).join('');
-
-const every = (a: AssemblyKey, s: Set<CompKey>) => ASSEMBLIES[a].comps.every((k) => s.has(k));
-/** Toggle one or a set: if all of them are in, take them out; otherwise put them all in. */
-function toggle(s: Set<CompKey>, ks: readonly CompKey[]) {
-  const all = ks.every((k) => s.has(k));
-  for (const k of ks) if (all) s.delete(k); else s.add(k);
-}
-function spot(ks: readonly CompKey[]) {
-  toggle(ui.spot, ks);
-  for (const k of ks) if (ui.spot.has(k)) ui.removed.delete(k); // lighting up something taken off puts it back
-  refresh(true);
-}
-function remove(ks: readonly CompKey[]) {
-  toggle(ui.removed, ks);
-  for (const k of ks) if (ui.removed.has(k)) ui.spot.delete(k);
-  refresh(true);
-}
-$('tree').addEventListener('click', (e) => {
-  const b = (e.target as Element).closest<HTMLElement>('button');
-  const d = b?.dataset;
-  if (!d) return;
-  if (d.spot) spot([d.spot as CompKey]);
-  else if (d.spotAsm) spot(ASSEMBLIES[d.spotAsm as AssemblyKey].comps);
-  else if (d.rm) remove([d.rm as CompKey]);
-  else if (d.rmAsm) remove(ASSEMBLIES[d.rmAsm as AssemblyKey].comps);
+/* ---------------- the system shelf ---------------- */
+$('shelf-body').innerHTML = FAMILY_ORDER.map((f) =>
+  `<section class="fam"><span class="kind ${f}">${FAMILIES[f]}</span>${SYSTEM_ORDER.filter((k) => SYSTEMS[k].family === f).map((k) =>
+    `<button class="sys" data-sys="${k}" title="${SYSTEMS[k].question}"><b>${SYSTEMS[k].name}</b><span>${SYSTEMS[k].line}</span></button>`).join('')}</section>`).join('');
+$('shelf').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('[data-sys]');
+  if (b) show(b.dataset.sys as SystemKey);
 });
-$('b-reset').onclick = () => { ui.spot.clear(); ui.removed.clear(); refresh(true); };
-// on a phone the tree starts folded, so the car is what you see first
-if (innerWidth < 700) { $('tree-body').hidden = true; $('b-tree').setAttribute('aria-expanded', 'false'); }
-$('b-tree').onclick = () => {
-  const open = $('tree-body').hidden;
-  $('tree-body').hidden = !open; $('b-tree').setAttribute('aria-expanded', String(open));
+$('b-whole').onclick = () => show(null);
+// on a phone the shelf starts folded, so the car is what you see first
+if (innerWidth < 700) { $('shelf-body').hidden = true; $('b-shelf').setAttribute('aria-expanded', 'false'); }
+$('b-shelf').onclick = () => {
+  const open = $('shelf-body').hidden;
+  $('shelf-body').hidden = !open; $('b-shelf').setAttribute('aria-expanded', String(open));
 };
 
-/** Bring the 3D view and the tree in line with the state. */
-function refresh(reframe: boolean) {
-  applyView({ spot: ui.spot, removed: ui.removed });
-  for (const b of document.querySelectorAll<HTMLElement>('[data-spot]')) b.setAttribute('aria-pressed', String(ui.spot.has(b.dataset.spot as CompKey)));
-  for (const b of document.querySelectorAll<HTMLElement>('[data-rm]')) {
-    const off = ui.removed.has(b.dataset.rm as CompKey);
-    b.setAttribute('aria-pressed', String(off)); b.closest('li')!.classList.toggle('off', off);
+/** Show a system (or the whole car): every step solid, its own motion state and controls, its own viewpoint. Picking the one on show again re-frames it. */
+function show(k: SystemKey | null) {
+  if (k !== ui.system) {
+    ui.system = k; ui.hidden.clear();
+    Object.assign(ui, MOTION, k ? SYSTEMS[k].starts : {});
+    ui.weaveClock = 0; ground.rough = ui.rough; ground.reshape();
+    renderDock();
   }
-  for (const a of ASSEMBLY_ORDER) {
-    document.querySelector(`[data-spot-asm="${a}"]`)!.setAttribute('aria-pressed', String(every(a, ui.spot)));
-    const off = every(a, ui.removed);
-    document.querySelector(`[data-rm-asm="${a}"]`)!.setAttribute('aria-pressed', String(off));
-  }
-  $('b-reset').toggleAttribute('disabled', ui.spot.size === 0 && ui.removed.size === 0);
-  if (reframe) frame();
+  refresh();
+  frame();
 }
 
-/* ---------------- motion and teardown ---------------- */
-function tog(id: string, key: 'go' | 'weave' | 'rough' | 'locked' | 'slow' | 'trace', after?: () => void) {
-  const b = $(id);
-  b.onclick = () => { ui[key] = !ui[key]; b.setAttribute('aria-pressed', String(ui[key])); after?.(); };
+/* ---------------- the chain and its controls ---------------- */
+const FORM: Record<Form, string> = { stored: 'stored', electric: 'electric', light: 'light', spin: 'electric → spin', movement: 'movement' };
+const CONTROL_TIPS: Record<Control, string> = {
+  go: 'Run the motors, or stop', reverse: 'Swap + and − so the motor turns the other way', weave: 'Steer full left and right in turn',
+  rough: 'Rough ground or a smooth track', locked: 'Bolt the body to the wheels, as if there were no springs', trace: 'Graph one front wheel’s bumps against the body above it',
+  lights: 'Switch the light bar on or off',
+};
+function renderDock() {
+  const s = ui.system ? SYSTEMS[ui.system] : null;
+  $('dock-head').innerHTML = s
+    ? `<span class="kind ${s.family}">${FAMILIES[s.family]}</span><b>${s.name}</b><span class="hint">Click a step, a part or its name tag to make it see-through</span>`
+    : '<b>The whole car</b><span class="hint">Pick a system, or click a part to see the system it works in</span>';
+  $('chain').innerHTML = s ? s.stages.map((st, i) =>
+    `${i ? '<span class="arr" aria-hidden="true">›</span>' : ''}<button class="step" data-step="${i}" aria-pressed="true" title="Make the ${st.name.toLowerCase()} see-through"><b>${st.name}</b><i class="f-${st.form}">${FORM[st.form]}</i></button>`).join('')
+    + '<button class="mini" id="b-all" hidden>Show all</button>' : '';
+  const ctl = s ? s.controls : ([['go', 'Driving'], ['rough', 'Rough ground']] as const);
+  $('controls').innerHTML = [...ctl, ['slow', 'Slow-mo'] as const].map(([key, label]) =>
+    `<button class="tog" data-ctl="${key}" aria-pressed="${ui[key]}" title="${key === 'slow' ? 'Slow everything down' : CONTROL_TIPS[key]}">${label}</button>`).join('');
 }
-tog('b-go', 'go');
-tog('b-weave', 'weave', () => { ui.weaveClock = 0; });
-tog('b-rough', 'rough', () => { ground.rough = ui.rough; ground.reshape(); });
-tog('b-lock', 'locked');
-tog('b-slow', 'slow');
-tog('b-trace', 'trace');
-const slider = $<HTMLInputElement>('explode');
-slider.addEventListener('input', () => { ui.explodeT = Number(slider.value) / 100; });
-slider.addEventListener('change', () => frame()); // reframe once the slider is let go
+$('chain').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('button');
+  if (!b) return;
+  if (b.id === 'b-all') { ui.hidden.clear(); refresh(); } else if (b.dataset.step) toggleStep(Number(b.dataset.step));
+});
+$('controls').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('[data-ctl]');
+  if (!b) return;
+  const key = b.dataset.ctl as Control | 'slow';
+  ui[key] = !ui[key]; b.setAttribute('aria-pressed', String(ui[key]));
+  if (key === 'weave') ui.weaveClock = 0;
+  if (key === 'rough') { ground.rough = ui.rough; ground.reshape(); }
+});
+
+/** Make a step of the chain see-through, or solid again. The camera stays put. */
+function toggleStep(i: number) {
+  if (!ui.system || !canHide(ui.system, ui.hidden, i)) return;
+  if (ui.hidden.has(i)) ui.hidden.delete(i); else ui.hidden.add(i);
+  refresh();
+}
+/** A click on a part or its tag: in the system on show, make its step see-through or solid; from the whole car, open its system. */
+function pickPart(k: CompKey) {
+  if (!ui.system) { const s = systemFor(k); if (s) show(s); return; }
+  const i = stageOf(ui.system, k);
+  if (i >= 0) toggleStep(i);
+}
+
+/** Bring the 3D view, the shelf and the chain in line with the state. */
+function refresh() {
+  ui.spot = new Set(ui.system ? litComps(ui.system, ui.hidden) : []);
+  applyView({ spot: ui.spot, removed: new Set() });
+  for (const b of document.querySelectorAll<HTMLElement>('[data-sys]')) b.setAttribute('aria-pressed', String(b.dataset.sys === ui.system));
+  $('b-whole').toggleAttribute('disabled', !ui.system);
+  if (!ui.system) return;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-step]')) {
+    const i = Number(b.dataset.step), on = !ui.hidden.has(i);
+    b.setAttribute('aria-pressed', String(on));
+    b.disabled = !canHide(ui.system, ui.hidden, i);
+    b.title = `Make the ${SYSTEMS[ui.system].stages[i].name.toLowerCase()} ${on ? 'see-through' : 'solid again'}`;
+  }
+  $('b-all').hidden = ui.hidden.size === 0;
+}
 
 /* ---------------- picking parts in 3D ---------------- */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -162,27 +169,30 @@ function pickComp(cx: number, cy: number): CompKey | null {
   ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(allMeshes.filter((m) => isShown(m)), false);
-  const h = hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
-  return h ? compOf(h.object as (typeof allMeshes)[number]) : null;
+  // a part of the system on show wins over what is in front of it, so see-through steps can be clicked back
+  const mine = ui.system ? hits.find((x) => stageOf(ui.system!, compOf(x.object as PartMesh)) >= 0) : undefined;
+  const h = mine ?? hits.find((x) => (x.object as THREE.Mesh).material !== GHOST) ?? hits[0];
+  return h ? compOf(h.object as PartMesh) : null;
 }
+const clickable = (k: CompKey | null): k is CompKey => !!k && (ui.system ? stageOf(ui.system, k) >= 0 : !!systemFor(k));
 let downAt: { x: number; y: number } | null = null;
 carCanvas.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; });
 carCanvas.addEventListener('pointerup', (e) => {
   if (!downAt) return;
   const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
   downAt = null;
-  if (moved < 6) { const k = pickComp(e.clientX, e.clientY); if (k) spot([k]); }
+  if (moved < 6) { const k = pickComp(e.clientX, e.clientY); if (clickable(k)) pickPart(k); }
 });
 let hoverAt = 0;
 carCanvas.addEventListener('pointermove', (e) => {
   if (e.buttons || e.timeStamp - hoverAt < 80) return; // picking costs a raycast against every mesh: not every move
   hoverAt = e.timeStamp;
-  const k = pickComp(e.clientX, e.clientY);
-  carCanvas.classList.toggle('picking', !!k);
-  carCanvas.title = k ? COMPS[k].name : '';
+  const k = pickComp(e.clientX, e.clientY), ok = clickable(k);
+  carCanvas.classList.toggle('picking', ok);
+  carCanvas.title = ok ? COMPS[k].name : '';
 });
 
-const labels = new LabelLayer($('labels'), (k) => spot([k]));
+const labels = new LabelLayer($('labels'), pickPart);
 const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ride-feel'));
 
 /* ---------------- theme & size ---------------- */
@@ -194,35 +204,33 @@ const resize = () => stage.resize(bay.clientWidth, bay.clientHeight);
 new ResizeObserver(resize).observe(bay);
 resize();
 camera.position.copy(stage.home.target).add(stage.home.pos.clone().sub(stage.home.target).multiplyScalar(stage.fitK()));
-void car.decalsReady.then(() => refresh(false));
+void car.decalsReady.then(refresh);
 
 /* ---------------- frame loop ---------------- */
 /** Weave: full left, straight, full right, straight, each for this long (s). */
 const WEAVE_STEP = 1.6;
-const tree = $('tree'), treeBody = $('tree-body');
+const unlit = (cs: readonly CompKey[]) => new Set(cs.filter((k) => !ui.spot.has(k)));
+const shelf = $('shelf'), shelfBody = $('shelf-body');
 let last = performance.now();
 function tick(now: number) {
   const rdt = frameStep(now, last);
   last = now;
   ui.timeScale = lerp(ui.timeScale, ui.slow ? 0.15 : 1, Math.min(1, rdt * 5));
   const dt = rdt * ui.timeScale;
-  ui.explode += (ui.explodeT - ui.explode) * Math.min(1, rdt * (reduceMotion ? 30 : 3.2));
-  const e = ease(clamp(ui.explode, 0, 1)), onStand = ui.explode > 0.02;
-  setApart(onStand);
 
-  // the car drives on by itself; on the stand the wheels and gears keep turning while it stays put
+  // the car drives on by itself, and steers by itself while weaving (standing still, it still turns its wheels)
   ui.weaveClock += dt;
-  const steer = ui.weave && ui.go ? ([1, 0, -1, 0] as const)[Math.floor(ui.weaveClock / WEAVE_STEP) % 4] : 0;
-  const { accel } = stepDrive(drive, ui.go ? 1 : 0, steer, dt, onStand);
+  const steer = ui.weave ? ([1, 0, -1, 0] as const)[Math.floor(ui.weaveClock / WEAVE_STEP) % 4] : 0;
+  const { accel } = stepDrive(drive, ui.go ? (ui.reverse ? -1 : 1) : 0, steer, dt, false);
   ground.follow(drive.pose);
 
   const bumps = {} as CornerBumps;
-  for (const c of CORNERS) { const [wx, wz] = wheelWorld(drive.pose, c.x, c.z); bumps[c.key] = onStand ? 0 : groundHeight(wx, wz, ground.rough); }
+  for (const c of CORNERS) { const [wx, wz] = wheelWorld(drive.pose, c.x, c.z); bumps[c.key] = groundHeight(wx, wz, ground.rough); }
   stepSuspension(body, bumps, { locked: ui.locked, accel, v: drive.v, steer: drive.steer, dt });
-  ride.sample(dt, bumps.FL, bodyHeightAt(body, XF, -TZ), onStand);
+  ride.sample(dt, bumps.FL, bodyHeightAt(body, XF, -TZ), false);
 
-  const lights = !compRemoved('lightBar');
-  poseCar(car, { drive, body, bumps, explode: e, explodeRaw: ui.explode, onStand, lights, ledGlows: compSolid('lightBar'), steerHeld: steer, springTint: compSolid('shocksF') || compSolid('shocksR'), dt });
+  const springTint = ui.system !== null && (ui.spot.has('shocksF') || ui.spot.has('shocksR'));
+  poseCar(car, { drive, body, bumps, explode: 0, explodeRaw: 0, onStand: false, lights: ui.lights, ledGlows: compSolid('lightBar'), steerHeld: steer, springTint, dt });
 
   if (camTween) {
     camTween.t += rdt / camTween.dur;
@@ -231,19 +239,21 @@ function tick(now: number) {
     camera.position.lerpVectors(camTween.fP, camTween.tP, k);
     if (camTween.t >= 1) camTween = null;
   }
-  // keep what the camera looks at clear of the tree on the left (on narrow screens the tree folds over the car instead)
-  const wide = bay.clientWidth > 900 && !treeBody.hidden;
-  ui.shift = lerp(ui.shift, wide ? (tree.offsetWidth + 14) / 2 : 0, Math.min(1, rdt * (reduceMotion ? 30 : 6)));
+  // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead)
+  const wide = bay.clientWidth > 900 && !shelfBody.hidden;
+  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : 0, Math.min(1, rdt * (reduceMotion ? 30 : 6)));
   stage.setShift(ui.shift);
   orbit.update();
   stage.followTarget();
 
   car.root.updateMatrixWorld(true);
-  labels.update(camera, bay.clientWidth, bay.clientHeight, COMP_ORDER.filter((k) => ui.spot.has(k)), rdt);
+  const sys = ui.system ? systemComps(ui.system) : [];
+  labels.update(camera, bay.clientWidth, bay.clientHeight, [...sys.filter((k) => ui.spot.has(k)), ...sys.filter((k) => !ui.spot.has(k))], rdt, unlit(sys));
   rideGraph.draw(ride, ui.trace);
 
   stage.renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
-refresh(false);
+renderDock();
+refresh();
 requestAnimationFrame(tick);

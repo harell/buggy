@@ -50,8 +50,11 @@ export class LabelLayer {
     return a;
   }
 
-  /** Draw the tags for `shown` components; `first` wins overlaps. Call after the car is posed. */
-  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number): void {
+  /**
+   * Draw the tags for `shown` components; earlier ones win overlaps. Those in `off` are see-through, and their tags
+   * stay, faded, so they can be clicked back. Call after the car is posed.
+   */
+  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number, off: ReadonlySet<CompKey> = new Set()): void {
     const smooth = 1 - Math.exp(-dt * 14), on = new Set(shown);
     const placed: { L: LabelEl; w: number; h: number }[] = [];
     for (const k of [...shown, ...COMP_ORDER.filter((x) => !on.has(x))]) {
@@ -64,6 +67,7 @@ export class LabelLayer {
       const tx = ((p.x + 1) / 2) * w, ty = ((1 - p.y) / 2) * h;
       if (!L.live) { L.x = tx; L.y = ty; L.live = true; } else { L.x += (tx - L.x) * smooth; L.y += (ty - L.y) * smooth; }
       L.el.hidden = false;
+      L.el.classList.toggle('off', off.has(k));
       placed.push({ L, w: L.el.offsetWidth || 90, h: L.el.offsetHeight || 24 });
     }
     const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })));

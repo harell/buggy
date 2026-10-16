@@ -6,15 +6,19 @@ import { allMeshes, compOf, isShown, type PartMesh } from '../model/parts';
 interface Anchor { obj: THREE.Object3D; local: THREE.Vector3 }
 interface LabelEl { el: HTMLButtonElement; x: number; y: number; live: boolean }
 
-/** The piece a mesh hangs from: it moves with the car but never spins, so a tag on it stays steady. */
-function pieceOf(m: THREE.Object3D): THREE.Object3D {
-  for (let n: THREE.Object3D | null = m; n; n = n.parent) if ((n.userData as { ex?: unknown }).ex) return n;
-  return m;
+/**
+ * The car's root, which stays put while the ground scrolls under it. A tag hung from it ignores the bouncing,
+ * steering and spinning of its part, so it only moves when the camera does, and never jitters while the car drives.
+ */
+function rootOf(m: THREE.Object3D): THREE.Object3D {
+  let n = m;
+  while (n.parent && !(n.parent as THREE.Scene).isScene) n = n.parent;
+  return n;
 }
 
 /**
  * Name tags over components. Each hangs from a point above the component's biggest mesh on its side nearest the
- * default camera, is smoothed on screen, and is laid out in a fixed order, so tags stay steady while the car moves.
+ * default camera, fixed to the car's root, and is laid out in a fixed order, so tags stay steady while the car moves.
  */
 export class LabelLayer {
   private labels = {} as Record<CompKey, LabelEl>;
@@ -42,7 +46,7 @@ export class LabelLayer {
     }
     let a: Anchor | null = null;
     if (best) {
-      const obj = pieceOf(best);
+      const obj = rootOf(best);
       b.setFromObject(best); b.getCenter(c); c.y = b.max.y + 0.4;
       a = { obj, local: obj.worldToLocal(c.clone()) };
     }
@@ -50,8 +54,11 @@ export class LabelLayer {
     return a;
   }
 
-  /** Draw the tags for `shown` components; `first` wins overlaps. Call after the car is posed. */
-  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number): void {
+  /**
+   * Draw the tags for `shown` components; earlier ones win overlaps. Those in `off` are see-through, and their tags
+   * stay, faded, so they can be clicked back. Call after the car is posed.
+   */
+  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number, off: ReadonlySet<CompKey> = new Set()): void {
     const smooth = 1 - Math.exp(-dt * 14), on = new Set(shown);
     const placed: { L: LabelEl; w: number; h: number }[] = [];
     for (const k of [...shown, ...COMP_ORDER.filter((x) => !on.has(x))]) {
@@ -64,6 +71,7 @@ export class LabelLayer {
       const tx = ((p.x + 1) / 2) * w, ty = ((1 - p.y) / 2) * h;
       if (!L.live) { L.x = tx; L.y = ty; L.live = true; } else { L.x += (tx - L.x) * smooth; L.y += (ty - L.y) * smooth; }
       L.el.hidden = false;
+      L.el.classList.toggle('off', off.has(k));
       placed.push({ L, w: L.el.offsetWidth || 90, h: L.el.offsetHeight || 24 });
     }
     const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })));

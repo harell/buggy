@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Interactive 3D teardown of a 1:16 RC buggy: watch it drive over rough ground, light up or take off any component or assembly, and pull the car apart without a screwdriver.">
+<meta name="description" content="Interactive 3D model of a 1:16 RC buggy, shown as systems: pick one to see how electricity becomes movement, or how the springs soak up bumps.">
 <title>Shuttle 08 Teardown</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='22' width='44' height='16' rx='5' fill='%231c5fe0'/%3E%3Ccircle cx='18' cy='42' r='9' fill='%23152238'/%3E%3Ccircle cx='46' cy='42' r='9' fill='%23152238'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,36 +12,26 @@
 </head>
 <body>
 <main class="bay" id="bay">
-  <canvas id="car" aria-label="3D model of the buggy driving over rough ground. Drag to rotate, scroll to zoom, click a part to light it up."></canvas>
+  <canvas id="car" aria-label="3D model of the buggy driving over rough ground. Drag to rotate, scroll to zoom, click a part of the lit-up system to make it see-through."></canvas>
   <div class="labels" id="labels"></div>
 
-  <aside class="tree glass" id="tree" aria-label="Components">
-    <header class="tree-head">
+  <aside class="shelf glass" id="shelf" aria-label="Systems">
+    <header class="shelf-head">
       <span class="brand">SHUTTLE <b>08</b></span>
       <span class="tools">
-        <button class="mini" id="b-reset" title="Everything back on the car, nothing lit up">Reset</button>
-        <button class="mini" id="b-tree" aria-expanded="true" aria-controls="tree-body">Parts</button>
+        <button class="mini" id="b-whole" title="The whole car, solid">Whole car</button>
+        <button class="mini" id="b-shelf" aria-expanded="true" aria-controls="shelf-body">Systems</button>
       </span>
     </header>
-    <div id="tree-body"><div id="assemblies"></div></div>
+    <div id="shelf-body"></div>
   </aside>
 
-  <nav class="views glass" aria-label="Viewpoint">
-    <button data-view="threeq" aria-pressed="true">3/4</button>
-    <button data-view="side">Side</button>
-    <button data-view="front">Front</button>
-    <button data-view="rear">Rear</button>
-    <button data-view="top">Top</button>
-  </nav>
-
-  <section class="dock glass" aria-label="Motion and teardown">
-    <button class="tog" id="b-go" aria-pressed="true" title="Drive forward, or stop">Driving</button>
-    <button class="tog" id="b-weave" aria-pressed="false" title="Steer full left and right in turn">Weave</button>
-    <button class="tog" id="b-rough" aria-pressed="true" title="Rough ground or a smooth track">Rough ground</button>
-    <button class="tog" id="b-lock" aria-pressed="false" title="Bolt the body to the wheels, as if there were no springs">Springs locked</button>
-    <button class="tog" id="b-slow" aria-pressed="false" title="Slow everything down">Slow-mo</button>
-    <button class="tog" id="b-trace" aria-pressed="false" title="Graph one front wheel's bumps against the body above it">Ride trace</button>
-    <label class="apart"><span>Together</span><input type="range" id="explode" min="0" max="100" value="0" aria-label="Take the car apart"><span>Apart</span></label>
+  <section class="dock glass" aria-label="The system's chain and motion">
+    <p class="dock-head" id="dock-head"></p>
+    <div class="dock-row">
+      <div class="chain" id="chain"></div>
+      <div class="controls" id="controls"></div>
+    </div>
   </section>
 
   <div class="ride glass" id="ride" hidden>

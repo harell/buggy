@@ -62,6 +62,10 @@ Each system brings only the buttons that matter for it:
 
 **Slow-mo** is always there. In Bounce, each spring glows orange as it's squeezed. Lock the springs to feel the difference on the same bumps. Drag to orbit, scroll to zoom, and click the system's name again to get its viewpoint back. The name tags stay still while the car drives, so they're easy to click.
 
+### On a phone
+
+It works on phones too, upright or on their side. The systems become a row of tabs along the top, each with its family's colour, so switching is one tap and nothing covers the car. The chain and the buttons sit below. Rows that don't fit scroll sideways and fade at the edge to show there's more. Tap instead of click, drag with one finger to orbit and pinch to zoom. The camera frames the car in the space between the tabs and the dock, and everything stays clear of the notch and the home bar.
+
 ## About the car
 
 The model is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), in blue with its "SHUTTLE 08" and "WILD ROAD" decals. It has rear-wheel drive, a 2.4 GHz radio with on/off throttle and steering, one 3.7 V 14500 lithium-ion cell, and painted metal panels on a black plastic frame. The remote isn't shown, since the lesson is what happens inside the car. [How accurate is the model?](#how-accurate-is-the-model) says what's measured and what's a best guess.
@@ -89,7 +93,7 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 | --- | --- | --- |
 | `src/core/` | Pure logic: dimensions, terrain height field, driving model, suspension, gear and rack kinematics, ride meter, label layout, parts, components (`components.ts`) and the six systems with their chains (`systems.ts`) | Yes, `tests/*.test.ts` |
 | `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (which component each mesh belongs to, lighting up, ghosting, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
-| `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the car clear of the systems shelf), the moving ground, posing the car each frame (including the spring glow) | Visually |
+| `src/scene/` | Three.js scene: renderer and camera (with the shift that keeps the car clear of the systems shelf, or of the tabs and dock on a phone), the moving ground, posing the car each frame (including the spring glow) | Visually |
 | `src/ui/` | DOM pieces: name tags and the ride trace | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |
 

@@ -18,6 +18,8 @@ import { LabelLayer } from './ui/labels';
 import { RideGraph } from './ui/rideGraph';
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** What pointing at something is called here: a tap on a touch screen, a click with a mouse. */
+const TAP = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
 const bay = $('bay');
 const carCanvas = $<HTMLCanvasElement>('car');
 
@@ -81,8 +83,25 @@ $('shelf').addEventListener('click', (e) => {
   if (b) show(b.dataset.sys as SystemKey);
 });
 $('b-whole').onclick = () => show(null);
-// on a phone the shelf starts folded, so the car is what you see first
-if (innerWidth < 700) { $('shelf-body').hidden = true; $('b-shelf').setAttribute('aria-expanded', 'false'); }
+// on a phone the shelf gives way to one row of tabs, a family's colour on each, so switching never covers the car
+$('tabs').innerHTML = '<button class="tab whole" id="t-whole">Whole car</button>' + FAMILY_ORDER.map((f) =>
+  '<span class="sep" aria-hidden="true"></span>' + SYSTEM_ORDER.filter((k) => SYSTEMS[k].family === f).map((k) =>
+    `<button class="tab ${f}" data-sys="${k}" title="${SYSTEMS[k].question}">${SYSTEMS[k].name}</button>`).join('')).join('');
+$('tabs').addEventListener('click', (e) => {
+  const b = (e.target as Element).closest<HTMLElement>('button');
+  if (b) show(b.id === 't-whole' ? null : b.dataset.sys as SystemKey);
+});
+/** Fade either end of a row that scrolls sideways while there is more of it to see that way. */
+const edgeFade = (el: HTMLElement) => {
+  const mark = () => {
+    el.classList.toggle('more-l', el.scrollLeft > 2);
+    el.classList.toggle('more-r', el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  };
+  el.addEventListener('scroll', mark, { passive: true });
+  new ResizeObserver(mark).observe(el);
+  return mark;
+};
+const fadeTabs = edgeFade($('tabs')), fadeChain = edgeFade($('chain'));
 $('b-shelf').onclick = () => {
   const open = $('shelf-body').hidden;
   $('shelf-body').hidden = !open; $('b-shelf').setAttribute('aria-expanded', String(open));
@@ -110,14 +129,15 @@ const CONTROL_TIPS: Record<Control, string> = {
 function renderDock() {
   const s = ui.system ? SYSTEMS[ui.system] : null;
   $('dock-head').innerHTML = s
-    ? `<span class="kind ${s.family}">${FAMILIES[s.family]}</span><b>${s.name}</b><span class="hint">Click a step, a part or its name tag to make it see-through</span>`
-    : '<b>The whole car</b><span class="hint">Pick a system, or click a part to see the system it works in</span>';
+    ? `<span class="kind ${s.family}">${FAMILIES[s.family]}</span><b>${s.name}</b><span class="hint">${TAP} a step, a part or its name tag to make it see-through</span><span class="hint-short">${TAP} a step or part to see through it</span>`
+    : `<b>The whole car</b><span class="hint">Pick a system, or ${TAP.toLowerCase()} a part to see the system it works in</span><span class="hint-short">${TAP} a part to find its system</span>`;
   $('chain').innerHTML = s ? s.stages.map((st, i) =>
     `${i ? '<span class="arr" aria-hidden="true">›</span>' : ''}<button class="step" data-step="${i}" aria-pressed="true" title="Make the ${st.name.toLowerCase()} see-through"><b>${st.name}</b><i class="f-${st.form}">${FORM[st.form]}</i></button>`).join('')
     + '<button class="mini" id="b-all" hidden>Show all</button>' : '';
   const ctl = s ? s.controls : ([['go', 'Driving'], ['rough', 'Rough ground']] as const);
   $('controls').innerHTML = [...ctl, ['slow', 'Slow-mo'] as const].map(([key, label]) =>
     `<button class="tog" data-ctl="${key}" aria-pressed="${ui[key]}" title="${key === 'slow' ? 'Slow everything down' : CONTROL_TIPS[key]}">${label}</button>`).join('');
+  $('chain').scrollLeft = 0; fadeChain();
 }
 $('chain').addEventListener('click', (e) => {
   const b = (e.target as Element).closest<HTMLElement>('button');
@@ -152,6 +172,9 @@ function refresh() {
   applyView({ spot: ui.spot, removed: new Set() });
   for (const b of document.querySelectorAll<HTMLElement>('[data-sys]')) b.setAttribute('aria-pressed', String(b.dataset.sys === ui.system));
   $('b-whole').toggleAttribute('disabled', !ui.system);
+  $('t-whole').setAttribute('aria-pressed', String(!ui.system));
+  const tab = $('tabs').querySelector<HTMLElement>('[aria-pressed="true"]');
+  if (tab && $('tabs').offsetParent) { $('tabs').scrollTo({ left: tab.offsetLeft - ($('tabs').clientWidth - tab.offsetWidth) / 2, behavior: reduceMotion ? 'auto' : 'smooth' }); fadeTabs(); }
   if (!ui.system) return;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-step]')) {
     const i = Number(b.dataset.step), on = !ui.hidden.has(i);
@@ -196,6 +219,7 @@ const labels = new LabelLayer($('labels'), pickPart);
 const rideGraph = new RideGraph($('ride'), $<HTMLCanvasElement>('ride-c'), $('ride-feel'));
 
 /* ---------------- theme & size ---------------- */
+renderDock(); // first, so the dock has its height when the camera is fitted between the panels
 const theme = () => syncTheme(scene, ground.material);
 theme();
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -203,6 +227,13 @@ new MutationObserver(theme).observe(document.documentElement, { attributes: true
 const resize = () => stage.resize(bay.clientWidth, bay.clientHeight);
 new ResizeObserver(resize).observe(bay);
 resize();
+/** On a phone, the picture height taken by the tabs above the car and the dock below it (none elsewhere). */
+const tabs = $('tabs'), dock = $('dock');
+const panelInsets = () => tabs.offsetParent
+  ? { t: tabs.offsetTop + tabs.offsetHeight, b: bay.clientHeight - dock.offsetTop }
+  : { t: 0, b: 0 };
+let inset = panelInsets();
+stage.setInsets(inset.t, inset.b);
 camera.position.copy(stage.home.target).add(stage.home.pos.clone().sub(stage.home.target).multiplyScalar(stage.fitK()));
 void car.decalsReady.then(refresh);
 
@@ -239,21 +270,24 @@ function tick(now: number) {
     camera.position.lerpVectors(camTween.fP, camTween.tP, k);
     if (camTween.t >= 1) camTween = null;
   }
-  // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead)
-  const wide = bay.clientWidth > 900 && !shelfBody.hidden;
-  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : 0, Math.min(1, rdt * (reduceMotion ? 30 : 6)));
+  // keep what the camera looks at clear of the shelf on the left (on narrow screens the shelf folds over the car instead),
+  // and on a phone, between the tabs above and the dock below
+  const follow = Math.min(1, rdt * (reduceMotion ? 30 : 6)), want = panelInsets();
+  const wide = bay.clientWidth > 900 && !shelfBody.hidden && shelf.offsetParent !== null;
+  ui.shift = lerp(ui.shift, wide ? (shelf.offsetWidth + 14) / 2 : 0, follow);
+  inset = { t: lerp(inset.t, want.t, follow), b: lerp(inset.b, want.b, follow) };
   stage.setShift(ui.shift);
+  stage.setInsets(inset.t, inset.b);
   orbit.update();
   stage.followTarget();
 
   car.root.updateMatrixWorld(true);
   const sys = ui.system ? systemComps(ui.system) : [];
-  labels.update(camera, bay.clientWidth, bay.clientHeight, sys, rdt, unlit(sys)); // chain order, so hiding a step never reshuffles the tags
+  labels.update(camera, bay.clientWidth, bay.clientHeight, sys, rdt, unlit(sys), want.t); // chain order, so hiding a step never reshuffles the tags
   rideGraph.draw(ride, ui.trace);
 
   stage.renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
-renderDock();
 refresh();
 requestAnimationFrame(tick);

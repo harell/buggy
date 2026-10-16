@@ -1,5 +1,6 @@
 /* Layout: the 3D bay fills the window and the car stays the subject. Left: the shelf of systems in three families.
-   Bottom: the picked system's chain, each step a toggle, and its own motion controls. Bottom right: the ride trace, when it is on. */
+   Bottom: the picked system's chain, each step a toggle, and its own motion controls. Bottom right: the ride trace, when it is on.
+   On a phone the shelf becomes one row of tabs at the top, and the car sits between the tabs and the dock. */
 :root{
   --bg:#edf1f6;
   --panel:#ffffff;
@@ -23,6 +24,8 @@
   --font-body:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
   --r:12px;
   --gap:14px;
+  /* clear of a notch, rounded corners and the home bar */
+  --sa-t:env(safe-area-inset-top,0px); --sa-r:env(safe-area-inset-right,0px); --sa-b:env(safe-area-inset-bottom,0px); --sa-l:env(safe-area-inset-left,0px);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -39,8 +42,9 @@
 :root{color-scheme:light}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;overflow:hidden}
-button{font:inherit;color:inherit}
+@supports (height:100dvh){html,body{height:100dvh}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 button:focus-visible,.label:focus-visible{outline:3px solid var(--glow);outline-offset:2px}
 
 .bay{position:relative;height:100%;overflow:hidden;background:var(--scene);outline:none}
@@ -85,7 +89,8 @@ button:focus-visible,.label:focus-visible{outline:3px solid var(--glow);outline-
 .dock{position:absolute;left:calc(var(--gap) + 236px + 12px);right:var(--gap);bottom:var(--gap);z-index:3;display:flex;flex-direction:column;gap:6px;padding:8px 10px}
 .dock-head{margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
 .dock-head b{font-family:var(--font-display);font-size:15px}
-.dock-head .hint{color:var(--muted);font-weight:700}
+.dock-head .hint,.dock-head .hint-short{color:var(--muted);font-weight:700}
+.dock-head .hint-short{display:none}
 .dock-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .chain{display:flex;align-items:center;gap:4px;overflow-x:auto;min-width:0;padding:2px}
 .arr{color:var(--muted);font-weight:800}
@@ -110,6 +115,18 @@ button:focus-visible,.label:focus-visible{outline:3px solid var(--glow);outline-
 .ride .key{display:flex;gap:12px;font-size:12px;font-weight:800;color:var(--muted);margin-top:4px}
 .ride .key i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
 #ride-feel{margin-left:auto;color:var(--ink)}
+/* top, on a phone only: the systems as one row of tabs, each with its family's colour */
+.tabs{display:none}
+.tab{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1.5px solid transparent;background:none;border-radius:999px;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
+.tab::before{content:"";width:8px;height:8px;border-radius:50%}
+.tab.elec::before{background:var(--glow)} .tab.mech::before{background:var(--mech)} .tab.both::before{background:linear-gradient(90deg,var(--glow) 50%,var(--mech) 50%)}
+.tab.whole::before{display:none}
+.tab[aria-pressed="true"]{border-color:var(--ink);background:var(--panel-2)}
+.tabs .sep{flex:none;width:1px;margin:7px 2px;background:var(--line)}
+/* a row that scrolls sideways fades out at the end while there is more of it */
+.more-l,.more-r{--fl:0px;--fr:0px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 var(--fl),#000 calc(100% - var(--fr)),transparent);mask-image:linear-gradient(90deg,transparent,#000 var(--fl),#000 calc(100% - var(--fr)),transparent)}
+.more-l{--fl:36px} .more-r{--fr:36px}
+
 .nogl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
 
 /* smaller windows: the shelf folds away, the dock spans the width */
@@ -120,9 +137,35 @@ button:focus-visible,.label:focus-visible{outline:3px solid var(--glow);outline-
   #b-shelf{display:inline-block}
   .ride{bottom:150px;width:220px}
 }
-@media (max-width:560px){
-  .shelf{width:auto;max-width:calc(100% - 2 * var(--gap))}
+/* phones, upright or on their side: tabs on top, a compact dock below, the ride trace under the tabs */
+@media (max-width:700px),(max-height:500px){
+  :root{--gap:8px}
+  .shelf{display:none}
+  .tabs{display:flex;position:absolute;z-index:4;top:calc(var(--gap) + var(--sa-t));left:calc(var(--gap) + var(--sa-l));right:calc(var(--gap) + var(--sa-r));gap:2px;padding:4px;border-radius:999px;overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+  .tabs::-webkit-scrollbar,.chain::-webkit-scrollbar{display:none}
+  .dock{left:calc(var(--gap) + var(--sa-l));right:calc(var(--gap) + var(--sa-r));bottom:calc(var(--gap) + var(--sa-b));gap:8px;padding:8px}
+  .dock-head{gap:8px}
   .dock-head .hint{display:none}
-  .chain{flex-wrap:nowrap;width:100%}
-  .ride{display:none}
+  .dock-head .hint-short{display:inline;font-size:12px}
+  .dock-row{gap:8px}
+  .chain{flex-wrap:nowrap;width:100%;scrollbar-width:none;overscroll-behavior-x:contain;scroll-padding:0 24px}
+  .step{padding:4px 8px}
+  .step b{font-size:13px}
+  .step i{font-size:9.5px}
+  .controls{width:100%;flex-wrap:nowrap;gap:6px}
+  .tog{flex:1 1 0;min-width:0;min-height:42px;padding:6px 6px;font-size:12.5px;white-space:normal;line-height:1.1}
+  .label{font-size:10.5px;padding:3px 8px 3px 18px}
+  .label::before{left:6px;width:7px;height:7px;margin-top:-3.5px}
+  .ride{left:calc(var(--gap) + var(--sa-l));right:calc(var(--gap) + var(--sa-r));top:calc(var(--gap) + var(--sa-t) + 54px);bottom:auto;width:auto;padding:8px 10px}
+  #ride-c{height:56px}
+}
+/* phones on their side: little height, so the chain and the buttons share one row */
+@media (max-height:500px) and (min-width:501px){
+  .tabs{right:auto;max-width:calc(100% - 2 * var(--gap) - var(--sa-l) - var(--sa-r))}
+  .dock-head{display:none}
+  .dock-row{flex-wrap:nowrap}
+  .chain{flex:1 1 auto;width:auto}
+  .controls{flex:none;width:auto}
+  .tog{flex:none;white-space:nowrap;padding:6px 10px}
+  .ride{left:auto;width:280px}
 }

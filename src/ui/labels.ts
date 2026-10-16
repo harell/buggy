@@ -56,9 +56,9 @@ export class LabelLayer {
 
   /**
    * Draw the tags for `shown` components; earlier ones win overlaps. Those in `off` are see-through, and their tags
-   * stay, faded, so they can be clicked back. Call after the car is posed.
+   * stay, faded, so they can be clicked back. Tags stay below `top` (px), where a bar may cover them. Call after the car is posed.
    */
-  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number, off: ReadonlySet<CompKey> = new Set()): void {
+  update(camera: THREE.Camera, w: number, h: number, shown: readonly CompKey[], dt: number, off: ReadonlySet<CompKey> = new Set(), top = 0): void {
     const smooth = 1 - Math.exp(-dt * 14), on = new Set(shown);
     const placed: { L: LabelEl; w: number; h: number }[] = [];
     for (const k of [...shown, ...COMP_ORDER.filter((x) => !on.has(x))]) {
@@ -74,7 +74,8 @@ export class LabelLayer {
       L.el.classList.toggle('off', off.has(k));
       placed.push({ L, w: L.el.offsetWidth || 90, h: L.el.offsetHeight || 24 });
     }
-    const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })));
+    // a tag's point is its bottom edge, so it clears `top` once its point is a tag's height below it
+    const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })), top > 0 ? top + 4 + (placed[0]?.h ?? 0) : -Infinity);
     placed.forEach(({ L }, i) => { L.el.style.transform = `translate(${Math.round(out[i].x)}px,${Math.round(out[i].y)}px) translate(-50%,-100%)`; });
   }
 }

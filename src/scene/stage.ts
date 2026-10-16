@@ -9,11 +9,13 @@ export interface Stage {
   controls: OrbitControls;
   sun: THREE.DirectionalLight;
   home: { pos: THREE.Vector3; target: THREE.Vector3 };
-  /** Narrow screens need the camera further back. */
+  /** Narrow screens, and a short gap between panels at the top and bottom, need the camera further back. */
   fitK(): number;
   resize(w: number, h: number): void;
   /** Slide the picture right by this many pixels, so what the camera looks at sits clear of a panel on the left. */
   setShift(px: number): void;
+  /** Pixels of the picture covered by panels at the top and bottom: the picture slides so what the camera looks at sits between them. */
+  setInsets(top: number, bottom: number): void;
   /** Keep the shadow-casting light over whatever the camera looks at. */
   followTarget(): void;
 }
@@ -51,16 +53,21 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   scene.add(sun, sun.target);
   const rim = new THREE.DirectionalLight(0xc4d8ff, 0.7); rim.position.set(-22, 14, -20); scene.add(rim);
 
-  const fitK = () => Math.max(1, 1.35 / camera.aspect);
-  let size = { w: 1, h: 1 }, shift = 0;
+  let size = { w: 1, h: 1 }, shift = 0, inset = { t: 0, b: 0 };
+  const fitK = () => Math.max(1, 1.35 / camera.aspect, size.h / Math.max(1, size.h - inset.t - inset.b));
   const applyShift = () => {
-    if (Math.abs(shift) < 0.5) camera.clearViewOffset();
-    else camera.setViewOffset(size.w, size.h, -shift, 0, size.w, size.h);
+    const up = (inset.b - inset.t) / 2;
+    if (Math.abs(shift) < 0.5 && Math.abs(up) < 0.5) camera.clearViewOffset();
+    else camera.setViewOffset(size.w, size.h, -shift, up, size.w, size.h);
   };
   return {
     renderer, scene, camera, controls, sun, home, fitK,
     resize(w, h) { size = { w, h }; renderer.setSize(w, h, false); camera.aspect = w / h; applyShift(); camera.updateProjectionMatrix(); },
     setShift(px) { if (Math.abs(px - shift) < 0.25) return; shift = px; applyShift(); camera.updateProjectionMatrix(); },
+    setInsets(t, b) {
+      if (Math.abs(t - inset.t) < 0.25 && Math.abs(b - inset.b) < 0.25) return;
+      inset = { t, b }; applyShift(); camera.updateProjectionMatrix();
+    },
     followTarget() {
       const t = controls.target;
       sun.position.set(t.x + 16, 34, t.z + 12); sun.target.position.set(t.x, 0, t.z);

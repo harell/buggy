@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { COMP_ORDER, COMPS, type CompKey } from '../core/components';
 import { resolveOverlaps } from '../core/layout';
+import { clamp } from '../core/math';
 import { allMeshes, compOf, isShown, type PartMesh } from '../model/parts';
 
 interface Anchor { obj: THREE.Object3D; local: THREE.Vector3 }
@@ -75,7 +76,9 @@ export class LabelLayer {
       placed.push({ L, w: L.el.offsetWidth || 90, h: L.el.offsetHeight || 24 });
     }
     // a tag's point is its bottom edge, so it clears `top` once its point is a tag's height below it
-    const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: L.x, y: L.y, w: bw, h: bh })), top > 0 ? top + 4 + (placed[0]?.h ?? 0) : -Infinity);
+    // never past the sides of the picture, where a tag could be neither read nor tapped
+    const inside = (x: number, bw: number) => clamp(x, bw / 2 + 4, Math.max(bw / 2 + 4, w - bw / 2 - 4));
+    const out = resolveOverlaps(placed.map(({ L, w: bw, h: bh }) => ({ x: inside(L.x, bw), y: L.y, w: bw, h: bh })), top > 0 ? top + 4 + (placed[0]?.h ?? 0) : -Infinity);
     placed.forEach(({ L }, i) => { L.el.style.transform = `translate(${Math.round(out[i].x)}px,${Math.round(out[i].y)}px) translate(-50%,-100%)`; });
   }
 }

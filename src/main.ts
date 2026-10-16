@@ -83,10 +83,11 @@ $('shelf').addEventListener('click', (e) => {
   if (b) show(b.dataset.sys as SystemKey);
 });
 $('b-whole').onclick = () => show(null);
-// on a phone the shelf gives way to one row of tabs, a family's colour on each, so switching never covers the car
-$('tabs').innerHTML = '<button class="tab whole" id="t-whole">Whole car</button>' + FAMILY_ORDER.map((f) =>
-  '<span class="sep" aria-hidden="true"></span>' + SYSTEM_ORDER.filter((k) => SYSTEMS[k].family === f).map((k) =>
-    `<button class="tab ${f}" data-sys="${k}" title="${SYSTEMS[k].question}">${SYSTEMS[k].name}</button>`).join('')).join('');
+// on a phone the shelf gives way to one row of tabs, a family's colour on each, so switching never covers the car;
+// "Whole car", the way back, stays put while the systems scroll
+$('tabs').innerHTML = '<button class="tab whole" id="t-whole">Whole car</button><span class="sep" aria-hidden="true"></span><div class="tab-row" id="tab-row">'
+  + FAMILY_ORDER.map((f, i) => (i ? '<span class="sep" aria-hidden="true"></span>' : '') + SYSTEM_ORDER.filter((k) => SYSTEMS[k].family === f).map((k) =>
+    `<button class="tab ${f}" data-sys="${k}" title="${SYSTEMS[k].question}">${SYSTEMS[k].name}</button>`).join('')).join('') + '</div>';
 $('tabs').addEventListener('click', (e) => {
   const b = (e.target as Element).closest<HTMLElement>('button');
   if (b) show(b.id === 't-whole' ? null : b.dataset.sys as SystemKey);
@@ -101,7 +102,10 @@ const edgeFade = (el: HTMLElement) => {
   new ResizeObserver(mark).observe(el);
   return mark;
 };
-const fadeTabs = edgeFade($('tabs')), fadeChain = edgeFade($('chain'));
+const fadeTabs = edgeFade($('tab-row')), fadeChain = edgeFade($('chain'));
+/** Scroll a row sideways so `item` sits in its middle. */
+const centreIn = (row: HTMLElement, item: HTMLElement) =>
+  row.scrollTo({ left: item.offsetLeft - (row.clientWidth - item.offsetWidth) / 2, behavior: reduceMotion ? 'auto' : 'smooth' });
 $('b-shelf').onclick = () => {
   const open = $('shelf-body').hidden;
   $('shelf-body').hidden = !open; $('b-shelf').setAttribute('aria-expanded', String(open));
@@ -163,7 +167,11 @@ function toggleStep(i: number) {
 function pickPart(k: CompKey) {
   if (!ui.system) { const s = systemFor(k); if (s) show(s); return; }
   const i = stageOf(ui.system, k);
-  if (i >= 0) toggleStep(i);
+  if (i < 0) return;
+  toggleStep(i);
+  // bring its step into view, so a narrow chain shows what the tap changed
+  const step = $('chain').querySelector<HTMLElement>(`[data-step="${i}"]`);
+  if (step) centreIn($('chain'), step);
 }
 
 /** Bring the 3D view, the shelf and the chain in line with the state. */
@@ -173,8 +181,8 @@ function refresh() {
   for (const b of document.querySelectorAll<HTMLElement>('[data-sys]')) b.setAttribute('aria-pressed', String(b.dataset.sys === ui.system));
   $('b-whole').toggleAttribute('disabled', !ui.system);
   $('t-whole').setAttribute('aria-pressed', String(!ui.system));
-  const tab = $('tabs').querySelector<HTMLElement>('[aria-pressed="true"]');
-  if (tab && $('tabs').offsetParent) { $('tabs').scrollTo({ left: tab.offsetLeft - ($('tabs').clientWidth - tab.offsetWidth) / 2, behavior: reduceMotion ? 'auto' : 'smooth' }); fadeTabs(); }
+  const tab = $('tab-row').querySelector<HTMLElement>('[aria-pressed="true"]');
+  if (tab && $('tabs').offsetParent) { centreIn($('tab-row'), tab); fadeTabs(); }
   if (!ui.system) return;
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-step]')) {
     const i = Number(b.dataset.step), on = !ui.hidden.has(i);
@@ -227,11 +235,25 @@ new MutationObserver(theme).observe(document.documentElement, { attributes: true
 const resize = () => stage.resize(bay.clientWidth, bay.clientHeight);
 new ResizeObserver(resize).observe(bay);
 resize();
-/** On a phone, the picture height taken by the tabs above the car and the dock below it (none elsewhere). */
-const tabs = $('tabs'), dock = $('dock');
-const panelInsets = () => tabs.offsetParent
-  ? { t: tabs.offsetTop + tabs.offsetHeight, b: bay.clientHeight - dock.offsetTop }
-  : { t: 0, b: 0 };
+// turning a phone round changes the picture's shape a lot: once it settles, frame the system afresh
+let aspectFramed = bay.clientWidth / bay.clientHeight, reframeAt = 0;
+new ResizeObserver(() => {
+  clearTimeout(reframeAt);
+  reframeAt = window.setTimeout(() => {
+    const a = bay.clientWidth / bay.clientHeight;
+    if (Math.abs(Math.log(a / aspectFramed)) < 0.25) return;
+    aspectFramed = a; inset = panelInsets(); stage.setInsets(inset.t, inset.b); frame();
+  }, 250);
+}).observe(bay);
+// the panels are the app, not a page: a pinch on them should not zoom the page (Safari's own gesture event)
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+/** On a phone, the picture height taken by the tabs (and a full-width ride trace under them) above the car, and the dock below it (none elsewhere). */
+const tabs = $('tabs'), dock = $('dock'), rideBox = $('ride');
+const panelInsets = () => {
+  if (!tabs.offsetParent) return { t: 0, b: 0 };
+  const over = rideBox.offsetParent && rideBox.offsetWidth > bay.clientWidth / 2 ? rideBox : tabs;
+  return { t: over.offsetTop + over.offsetHeight, b: bay.clientHeight - dock.offsetTop };
+};
 let inset = panelInsets();
 stage.setInsets(inset.t, inset.b);
 camera.position.copy(stage.home.target).add(stage.home.pos.clone().sub(stage.home.target).multiplyScalar(stage.fitK()));

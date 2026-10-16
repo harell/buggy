@@ -16,7 +16,7 @@ export interface Stage {
   setShift(px: number): void;
   /** Pixels of the picture covered by panels at the top and bottom: the picture slides so what the camera looks at sits between them. */
   setInsets(top: number, bottom: number): void;
-  /** Keep the shadow-casting light over whatever the camera looks at. */
+  /** Keep the shadow-casting light over whatever the camera looks at, and the fog beyond it however far back the camera stands. */
   followTarget(): void;
 }
 
@@ -40,7 +40,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   const controls = new OrbitControls(camera, canvas);
   controls.target.copy(home.target);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
-  controls.minDistance = 9; controls.maxDistance = 110;
+  controls.minDistance = 9; controls.maxDistance = 200; // a tall, narrow phone needs to stand far back to see the car side on
   controls.maxPolarAngle = Math.PI * 0.495;
   controls.screenSpacePanning = true;
 
@@ -71,6 +71,8 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
     followTarget() {
       const t = controls.target;
       sun.position.set(t.x + 16, 34, t.z + 12); sun.target.position.set(t.x, 0, t.z);
+      const fog = scene.fog as THREE.Fog, back = Math.max(0, camera.position.distanceTo(t) - 40);
+      fog.near = 90 + back; fog.far = 230 + back;
     },
   };
 }

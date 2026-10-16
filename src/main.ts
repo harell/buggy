@@ -248,7 +248,7 @@ function tick(now: number) {
 
   car.root.updateMatrixWorld(true);
   const sys = ui.system ? systemComps(ui.system) : [];
-  labels.update(camera, bay.clientWidth, bay.clientHeight, [...sys.filter((k) => ui.spot.has(k)), ...sys.filter((k) => !ui.spot.has(k))], rdt, unlit(sys));
+  labels.update(camera, bay.clientWidth, bay.clientHeight, sys, rdt, unlit(sys)); // chain order, so hiding a step never reshuffles the tags
   rideGraph.draw(ride, ui.trace);
 
   stage.renderer.render(scene, camera);

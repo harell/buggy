@@ -6,15 +6,19 @@ import { allMeshes, compOf, isShown, type PartMesh } from '../model/parts';
 interface Anchor { obj: THREE.Object3D; local: THREE.Vector3 }
 interface LabelEl { el: HTMLButtonElement; x: number; y: number; live: boolean }
 
-/** The piece a mesh hangs from: it moves with the car but never spins, so a tag on it stays steady. */
-function pieceOf(m: THREE.Object3D): THREE.Object3D {
-  for (let n: THREE.Object3D | null = m; n; n = n.parent) if ((n.userData as { ex?: unknown }).ex) return n;
-  return m;
+/**
+ * The car's root, which stays put while the ground scrolls under it. A tag hung from it ignores the bouncing,
+ * steering and spinning of its part, so it only moves when the camera does, and never jitters while the car drives.
+ */
+function rootOf(m: THREE.Object3D): THREE.Object3D {
+  let n = m;
+  while (n.parent && !(n.parent as THREE.Scene).isScene) n = n.parent;
+  return n;
 }
 
 /**
  * Name tags over components. Each hangs from a point above the component's biggest mesh on its side nearest the
- * default camera, is smoothed on screen, and is laid out in a fixed order, so tags stay steady while the car moves.
+ * default camera, fixed to the car's root, and is laid out in a fixed order, so tags stay steady while the car moves.
  */
 export class LabelLayer {
   private labels = {} as Record<CompKey, LabelEl>;
@@ -42,7 +46,7 @@ export class LabelLayer {
     }
     let a: Anchor | null = null;
     if (best) {
-      const obj = pieceOf(best);
+      const obj = rootOf(best);
       b.setFromObject(best); b.getCenter(c); c.y = b.max.y + 0.4;
       a = { obj, local: obj.worldToLocal(c.clone()) };
     }

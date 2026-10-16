@@ -69,7 +69,7 @@ function frame() {
   for (const m of allMeshes) if (isShown(m) && compOf(m) !== 'wires' && comps.has(compOf(m))) b.expandByObject(m);
   const dir = new THREE.Vector3(...SYSTEMS[ui.system].view).normalize();
   const c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3()).length();
-  tweenTo(c, c.clone().addScaledVector(dir, clamp(size * 1.35, 14, 60) * stage.fitK()));
+  tweenTo(c, c.clone().addScaledVector(dir, clamp(size * 1.35, 24, 60) * stage.fitK()));
 }
 
 /* ---------------- the system shelf ---------------- */

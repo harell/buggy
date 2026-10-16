@@ -1,23 +1,72 @@
 # Shuttle 08 Teardown
 
-An interactive 3D model of a toy RC buggy, shown as systems: sets of parts that work together. Pick one and the rest of the car turns see-through while the camera moves in. The systems are sorted by what happens to the energy in them: electrical (electricity in, no movement out), electrical + mechanical (electricity becomes movement) and mechanical (works with the battery out). It is meant for showing a child how the car works, in whatever order the conversation goes.
+**See how a toy RC car turns electricity into movement.**
 
-**Live site:** https://harell.github.io/buggy/ (after GitHub Pages is switched on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
+Shuttle 08 is an interactive 3D model of a real 1:16 toy buggy. Instead of a long list of parts, it shows the car as six *systems*: small groups of parts that work together. Pick one and the rest of the car fades to glass, the camera moves in, and you can follow the energy from the battery to the wheels.
 
-The car is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), shown in blue with its "SHUTTLE 08" and "WILD ROAD" decals. It has rear-wheel drive, a 2.4 GHz radio with on/off throttle and steering, one 3.7 V 14500 lithium-ion cell, and painted metal panels on a black plastic frame.
+It's made for a grown-up and a child sitting together, ideally with the real car on the table.
 
-## What you can do
+**Try it:** https://harell.github.io/buggy/ (once GitHub Pages is on, see [Turning on GitHub Pages](#turning-on-github-pages-once))
 
-There are no keyboard shortcuts and no script: every control is on screen.
+![The Go system: battery, wires, brain, drive motor, gears, axle and back wheels lit up inside a see-through car, with the chain of steps along the bottom](docs/screenshots/go.jpg)
 
-| Area | How it works |
+## Six systems, three families
+
+Every system is sorted by what happens to the energy inside it. That sorting is the lesson.
+
+| Family | Systems | What happens to the energy |
+| --- | --- | --- |
+| **Electrical** | **Power** (battery, wires, brain) and **Lights** | Electricity flows, but nothing moves. In Lights it comes out as light. |
+| **Electrical + mechanical** | **Go** (battery to the back wheels, through the drive motor and gears) and **Turn** (battery to the front wheels, through the steering motor and rack) | The motor is where electricity becomes movement. |
+| **Mechanical** | **Roll** (wheels, axle, gears and the motor they turn) and **Bounce** (springs, arms, rear axle, wheels) | No battery needed. Movement goes in, movement comes out. |
+
+The app opens on **Go**, because that's the heart of it. **Whole car** shows everything solid again, and clicking any part from there opens the system it belongs to.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/turn.jpg" alt="The Turn system: battery, brain, steering motor, rack, tie rods, knuckles and front wheels"><br><b>Turn</b>: a small motor slides the rack, and the tie rods swing the front wheels.</td>
+<td width="50%"><img src="docs/screenshots/bounce.jpg" alt="The Bounce system seen from the side at wheel height: springs, arms, rear axle and wheels"><br><b>Bounce</b>: seen from the side, at wheel height, so you can watch the springs work.</td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/lights.jpg" alt="The Lights system: battery, wires, brain and the three-LED light bar"><br><b>Lights</b>: electricity in, light out, and nothing moves.</td>
+<td width="50%"><img src="docs/screenshots/whole-car.jpg" alt="The whole car, solid, driving over rough ground"><br><b>Whole car</b>: everything solid. Click a part to jump to its system.</td>
+</tr>
+</table>
+
+## Follow the chain
+
+Along the bottom, the picked system is laid out as a chain of steps, each tagged with the form its energy is in: *stored*, *electric*, *electric → spin*, *movement*.
+
+**Want to focus on fewer parts?** Make any step see-through, in whichever way is handiest:
+
+- click the step in the chain,
+- click the part itself in 3D, or
+- click its orange name tag.
+
+Do the same again to bring it back. A see-through step turns dashed in the chain, and its tag stays, faded, so you can always click it back. **Show all** brings every step back at once. The last solid step can't be hidden, so there's always something to look at.
+
+![Go with the gears and back wheels made see-through: their steps are dashed in the chain and their tags faded](docs/screenshots/go-wheels-hidden.jpg)
+
+## Make it move
+
+Each system brings only the buttons that matter for it:
+
+| System | Buttons |
 | --- | --- |
-| Systems (left) | Six systems in three families. **Electrical:** Power (battery, wires, brain) and Lights. **Electrical + mechanical:** Go (battery to back wheels through the drive motor and gears) and Turn (battery to front wheels through the steering motor and rack). **Mechanical:** Roll (wheels, axle, gears and the motor they turn) and Bounce (springs, arms, rear axle, wheels). Picking one lights up its parts, ghosts the rest of the car, and moves the camera to that system's own viewpoint. Picking it again re-frames it. **Whole car** shows everything solid. The app opens on Go. |
-| Chain (bottom) | The picked system's parts as a chain of steps, each tagged with the form its energy is in (stored, electric, spin, movement). Click a step to make it see-through, and again to bring it back. Clicking a part of the system in 3D, or its name tag, does the same; the tags of see-through parts stay, faded and dashed, so they can be clicked back. The last solid step can't be hidden. **Show all** brings every step back. From the whole car, clicking a part opens the system it works in. |
-| Motion (bottom right) | Each system shows only its own controls: Go has Driving and Reverse, Turn has Left and right, Bounce has Rough ground, Lock the springs and Ride trace, Lights has Lights on, Roll has Push it. Slow-mo is always there. Picking a system resets the motion to how it starts. |
-| Springs | In Bounce, each spring glows orange as it is squeezed. |
+| Power | Motors running |
+| Lights | Lights on |
+| Go | Driving, Reverse |
+| Turn | Left and right, Driving |
+| Roll | Push it |
+| Bounce | Rough ground, Lock the springs, Ride trace |
 
-## Development
+**Slow-mo** is always there. In Bounce, each spring glows orange as it's squeezed. Lock the springs to feel the difference on the same bumps. Drag to orbit, scroll to zoom, and click the system's name again to get its viewpoint back. The name tags stay still while the car drives, so they're easy to click.
+
+## About the car
+
+The model is a 1:16 toy buggy sold as the DK087 (factory no. 3699-087), in blue with its "SHUTTLE 08" and "WILD ROAD" decals. It has rear-wheel drive, a 2.4 GHz radio with on/off throttle and steering, one 3.7 V 14500 lithium-ion cell, and painted metal panels on a black plastic frame. The remote isn't shown, since the lesson is what happens inside the car. [How accurate is the model?](#how-accurate-is-the-model) says what's measured and what's a best guess.
+
+## Run it yourself
 
 Built with TypeScript, [Three.js](https://threejs.org/) (from npm), [Vite](https://vitejs.dev/) and [Vitest](https://vitest.dev/). Needs Node 20 or newer.
 
@@ -39,14 +88,14 @@ The logic that decides how the car behaves is kept free of rendering and DOM cod
 | Folder | What lives there | Tested |
 | --- | --- | --- |
 | `src/core/` | Pure logic: dimensions, terrain height field, driving model, suspension, gear and rack kinematics, ride meter, label layout, parts, components (`components.ts`) and the six systems with their chains (`systems.ts`) | Yes, `tests/*.test.ts` |
-| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (which component each mesh belongs to, lighting up, removing, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
+| `src/model/` | Procedural 3D model: geometry builders (tested), the car's fixed mount points and outlines (`mounts.ts`, tested), materials and part registry (which component each mesh belongs to, lighting up, ghosting, cutaways, shadows), canvas textures, the car | Geometry builders, mount points and the part registry |
 | `src/scene/` | Three.js scene: renderer and camera (with the sideways shift that keeps the car clear of the systems shelf), the moving ground, posing the car each frame (including the spring glow) | Visually |
 | `src/ui/` | DOM pieces: name tags and the ride trace | Visually |
 | `src/main.ts` | Wires it all together and runs the frame loop | Visually |
 
 New behaviour starts as a failing test in `tests/`, then the code that makes it pass.
 
-## CI/CD
+## Builds and deploys
 
 Two GitHub Actions workflows live in `.github/workflows/`:
 
